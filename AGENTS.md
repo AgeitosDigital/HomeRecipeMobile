@@ -56,10 +56,13 @@ Use short kebab-case topic branches: `ui-ux`, `cookbooks`, `recipe-extraction`, 
 - Follow existing screen patterns and theme tokens  
 - Gate Pro features with entitlements (`useEntitlements`)  
 - Keep hit targets ≥ 44pt; use brand SVGs not emoji icons  
+- Keep `babel.config.js` + `metro.config.js` (`inlineRequires: true`) — required for Reanimated/worklets in Expo Go  
 
 **Don’t**
 
 - Add server secrets to the mobile client  
+- Re-enable `experiments.reactCompiler` without verifying Expo Go — it has crashed worklets (`SIGSEGV` in `toOptimizedObject`)  
+- Use Reanimated layout/`entering` animations casually in Expo Go until verified stable  
 - Port FullCalendar / video upload without an explicit request  
 - Invent new design systems (purple gradients, Inter, etc.) when brand tokens exist  
 - Edit plan files the user attached unless asked  

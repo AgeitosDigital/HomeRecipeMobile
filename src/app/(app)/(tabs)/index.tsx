@@ -8,7 +8,6 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { SearchIcon } from '@/components/icons';
 import { RecipeCard } from '@/components/recipe-card';
@@ -183,7 +182,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListHeaderComponent={
-            <Animated.View entering={FadeInDown.duration(200)}>
+            <View>
               <View style={styles.welcomeRow}>
                 <View style={{ flex: 1 }}>
                   <AppText variant="heading">
@@ -242,7 +241,7 @@ export default function HomeScreen() {
                     : undefined
                 }
               />
-            </Animated.View>
+            </View>
           }
           ListEmptyComponent={
             <EmptyState
@@ -258,15 +257,13 @@ export default function HomeScreen() {
               }}
             />
           }
-          renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(Math.min(index * 40, 200)).duration(200)}>
-              <RecipeCard
-                recipe={item}
-                favorited={favoriteIds.has(item.id)}
-                onToggleFavorite={() => toggleFavorite(item)}
-                onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
-              />
-            </Animated.View>
+          renderItem={({ item }) => (
+            <RecipeCard
+              recipe={item}
+              favorited={favoriteIds.has(item.id)}
+              onToggleFavorite={() => toggleFavorite(item)}
+              onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+            />
           )}
         />
       )}

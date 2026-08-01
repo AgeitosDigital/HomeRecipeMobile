@@ -1,17 +1,17 @@
+import { ClerkProvider, useAuth } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import {
   PlayfairDisplay_400Regular,
   PlayfairDisplay_700Bold,
   useFonts as usePlayfair,
 } from '@expo-google-fonts/playfair-display';
-import { ClerkProvider, useAuth } from '@clerk/expo';
-import { tokenCache } from '@clerk/expo/token-cache';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
-import '@/global.css';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -58,8 +58,10 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <RootNavigator />
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <RootNavigator />
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }

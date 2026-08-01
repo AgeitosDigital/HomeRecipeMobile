@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ChevronRightIcon, CookbookIcon, EmptyCookbookArt } from '@/components/icons';
 import { RecipeCard } from '@/components/recipe-card';
@@ -135,7 +134,7 @@ export default function CookbooksScreen() {
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled">
-        <Animated.View entering={FadeInDown.duration(200)}>
+        <View>
           <View style={styles.pageHeader}>
             <View style={styles.iconChip}>
               <CookbookIcon size={IconSize.lg} color={Colors.accent} />
@@ -220,7 +219,7 @@ export default function CookbooksScreen() {
               <AppText variant="muted">Heart recipes from Home to save them here.</AppText>
             </View>
           ) : null}
-        </Animated.View>
+        </View>
       </ScrollView>
 
       <Modal

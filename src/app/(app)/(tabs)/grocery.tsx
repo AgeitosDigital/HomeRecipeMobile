@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { GroceryIcon } from '@/components/icons';
 import {
@@ -147,7 +146,7 @@ export default function GroceryScreen() {
   return (
     <Screen edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Animated.View entering={FadeInDown.duration(200)} style={styles.pageHeader}>
+        <View style={styles.pageHeader}>
           <View style={styles.iconCircle}>
             <GroceryIcon size={IconSize.lg} color={Colors.accent} />
           </View>
@@ -155,7 +154,7 @@ export default function GroceryScreen() {
             <AppText variant="heading">Grocery List</AppText>
             <AppText variant="muted">Keep track of everything you need. Check off as you shop.</AppText>
           </View>
-        </Animated.View>
+        </View>
 
         <View style={styles.addRow}>
           <TextInput

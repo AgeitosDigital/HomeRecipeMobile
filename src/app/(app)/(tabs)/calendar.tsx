@@ -4,7 +4,6 @@ import { useRouter, type Href } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CalendarIcon } from '@/components/icons';
 import {
@@ -121,7 +120,7 @@ export default function CalendarScreen() {
           />
         }
         ListHeaderComponent={
-          <Animated.View entering={FadeInDown.duration(200)} style={styles.pageHeader}>
+          <View style={styles.pageHeader}>
             <View style={styles.iconChip}>
               <CalendarIcon size={IconSize.lg} color={Colors.accent} />
             </View>
@@ -129,7 +128,7 @@ export default function CalendarScreen() {
               <AppText variant="heading">Meal Calendar</AppText>
               <AppText variant="muted">See what's cooking next</AppText>
             </View>
-          </Animated.View>
+          </View>
         }
         ListEmptyComponent={
           <EmptyState
