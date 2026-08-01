@@ -1,14 +1,20 @@
 import { useAuth } from '@clerk/expo';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { RecipePickerSheet } from '@/components/recipe-picker-sheet';
 import { RecipeCard } from '@/components/recipe-card';
-import { EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, Button, EmptyState, ErrorState, LoadingState, Screen } from '@/components/ui';
+import { Colors, FontFamily, FontSize, Spacing } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
-import { fetchFolderRecipes, fetchFolders } from '@/lib/cookbooks';
+import {
+  addRecipeToFolder,
+  fetchFolderRecipes,
+  fetchFolders,
+  removeRecipeFromFolder,
+} from '@/lib/cookbooks';
 import type { RecipeListItem } from '@/lib/types';
 
 export default function FolderDetailScreen() {
@@ -23,6 +29,8 @@ export default function FolderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId || !folderId) return;
@@ -32,7 +40,7 @@ export default function FolderDetailScreen() {
       fetchFolderRecipes(supabase, folderId, userId, isPro),
     ]);
     const folder = folders.data.find((f) => f.id === folderId);
-    if (folder) setTitle(folder.name);
+    if (folder) setTitle(folder.folder_name);
     if (items.error) {
       setError(items.error);
       setRecipes([]);
@@ -53,9 +61,47 @@ export default function FolderDetailScreen() {
     };
   }, [load]);
 
+  const onAddRecipe = async (recipe: RecipeListItem) => {
+    if (!folderId) return;
+    setAdding(true);
+    const result = await addRecipeToFolder(supabase, folderId, recipe.id);
+    setAdding(false);
+    if (result.error) {
+      Alert.alert('Could not add', result.error);
+      return;
+    }
+    await load();
+  };
+
+  const onRemove = (recipe: RecipeListItem) => {
+    if (!folderId) return;
+    Alert.alert('Remove recipe?', `Remove “${recipe.recipe_label}” from this cookbook?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await removeRecipeFromFolder(supabase, folderId, recipe.id);
+          if (result.error) Alert.alert('Error', result.error);
+          else await load();
+        },
+      },
+    ]);
+  };
+
   return (
     <>
-      <Stack.Screen options={{ title }} />
+      <Stack.Screen
+        options={{
+          title,
+          headerRight: () =>
+            userId ? (
+              <Pressable onPress={() => setPickerOpen(true)} hitSlop={8}>
+                <AppText style={styles.headerAction}>Add</AppText>
+              </Pressable>
+            ) : null,
+        }}
+      />
       {loading ? (
         <LoadingState />
       ) : error ? (
@@ -76,18 +122,70 @@ export default function FolderDetailScreen() {
                 }}
               />
             }
+            ListHeaderComponent={
+              <View style={{ marginBottom: Spacing[3] }}>
+                <Button
+                  title={adding ? 'Adding…' : 'Add recipe'}
+                  loading={adding}
+                  onPress={() => setPickerOpen(true)}
+                />
+              </View>
+            }
             ListEmptyComponent={
-              <EmptyState title="Empty cookbook" message="Add recipes to this folder on the web." />
+              <EmptyState
+                title="Empty cookbook"
+                message="Add recipes from your library to this folder."
+                primaryAction={{
+                  title: 'Add recipe',
+                  onPress: () => setPickerOpen(true),
+                }}
+              />
             }
             renderItem={({ item }) => (
-              <RecipeCard
-                recipe={item}
-                onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
-              />
+              <View style={{ marginBottom: Spacing[2] }}>
+                <RecipeCard
+                  recipe={item}
+                  onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+                />
+                <Pressable onPress={() => onRemove(item)} hitSlop={8} style={styles.removeBtn}>
+                  <AppText style={styles.removeText}>Remove from cookbook</AppText>
+                </Pressable>
+              </View>
             )}
           />
         </Screen>
       )}
+
+      {userId ? (
+        <RecipePickerSheet
+          visible={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(recipe) => void onAddRecipe(recipe)}
+          supabase={supabase}
+          userId={userId}
+          isPro={isPro}
+          title="Add to cookbook"
+        />
+      ) : null}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  headerAction: {
+    color: Colors.accent,
+    fontFamily: FontFamily.bodyBold,
+    fontSize: FontSize.base,
+    paddingHorizontal: Spacing[2],
+  },
+  removeBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: Spacing[2],
+    marginBottom: Spacing[2],
+  },
+  removeText: {
+    color: Colors.errorFg,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+  },
+});

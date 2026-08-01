@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/expo';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Modal,
   Pressable,
   RefreshControl,
@@ -39,6 +40,10 @@ import {
   fetchFavorites,
   fetchFolderRecipeCounts,
   fetchFolders,
+  fetchTrashedFolders,
+  renameFolder,
+  restoreFolder,
+  softDeleteFolder,
 } from '@/lib/cookbooks';
 import type { FolderRow, RecipeListItem } from '@/lib/types';
 
@@ -50,10 +55,14 @@ export default function CookbooksScreen() {
 
   const [favorites, setFavorites] = useState<RecipeListItem[]>([]);
   const [folders, setFolders] = useState<FolderRow[]>([]);
+  const [trashed, setTrashed] = useState<FolderRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [newFolder, setNewFolder] = useState('');
   const [creating, setCreating] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<FolderRow | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,16 +70,18 @@ export default function CookbooksScreen() {
   const load = useCallback(async () => {
     if (!userId) return;
     setError(null);
-    const [fav, fold] = await Promise.all([
+    const [fav, fold, trash] = await Promise.all([
       fetchFavorites(supabase, userId, isPro),
       fetchFolders(supabase, userId),
+      fetchTrashedFolders(supabase, userId),
     ]);
-    if (fav.error || fold.error) {
-      setError(fav.error || fold.error);
+    if (fav.error || fold.error || trash.error) {
+      setError(fav.error || fold.error || trash.error);
       return;
     }
     setFavorites(fav.data);
     setFolders(fold.data);
+    setTrashed(trash.data);
     const nextCounts = await fetchFolderRecipeCounts(
       supabase,
       fold.data.map((f) => f.id)
@@ -102,12 +113,58 @@ export default function CookbooksScreen() {
     const result = await createFolder(supabase, userId, newFolder);
     setCreating(false);
     if (result.error) {
-      setError(result.error);
+      Alert.alert('Error', result.error);
       return;
     }
     setNewFolder('');
     setModalOpen(false);
     await load();
+  };
+
+  const onRename = async () => {
+    if (!userId || !renameTarget || !renameValue.trim()) return;
+    setRenaming(true);
+    const result = await renameFolder(supabase, userId, renameTarget.id, renameValue);
+    setRenaming(false);
+    if (result.error) {
+      Alert.alert('Error', result.error);
+      return;
+    }
+    setRenameTarget(null);
+    setRenameValue('');
+    await load();
+  };
+
+  const onFolderLongPress = (folder: FolderRow) => {
+    if (!userId) return;
+    Alert.alert(folder.folder_name, 'Manage cookbook', [
+      {
+        text: 'Rename',
+        onPress: () => {
+          setRenameTarget(folder);
+          setRenameValue(folder.folder_name);
+        },
+      },
+      {
+        text: 'Move to trash',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Delete cookbook?', `Move “${folder.folder_name}” to trash?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Trash',
+              style: 'destructive',
+              onPress: async () => {
+                const result = await softDeleteFolder(supabase, userId, folder.id);
+                if (result.error) Alert.alert('Error', result.error);
+                else await load();
+              },
+            },
+          ]);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   if (loading) {
@@ -142,7 +199,8 @@ export default function CookbooksScreen() {
             <View style={{ flex: 1 }}>
               <AppText variant="heading">Cookbooks</AppText>
               <AppText variant="muted">
-                Discover, organize and save your favorite recipes.
+                Discover, organize and save your favorite recipes. Long-press a folder to rename
+                or trash.
               </AppText>
             </View>
           </View>
@@ -179,12 +237,15 @@ export default function CookbooksScreen() {
               <Pressable
                 key={folder.id}
                 style={({ pressed }) => [styles.folderCard, pressed && { opacity: 0.9 }]}
-                onPress={() => router.push(`/(app)/cookbook/${folder.id}` as Href)}>
+                onPress={() => router.push(`/(app)/cookbook/${folder.id}` as Href)}
+                onLongPress={() => onFolderLongPress(folder)}>
                 <View style={styles.folderIcon}>
                   <CookbookIcon size={18} color={Colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <AppText style={{ fontFamily: FontFamily.bodyBold }}>{folder.name}</AppText>
+                  <AppText style={{ fontFamily: FontFamily.bodyBold }}>
+                    {folder.folder_name}
+                  </AppText>
                   <AppText variant="muted">
                     {counts[folder.id] ?? 0} recipe
                     {(counts[folder.id] ?? 0) === 1 ? '' : 's'}
@@ -194,6 +255,33 @@ export default function CookbooksScreen() {
               </Pressable>
             ))
           )}
+
+          {trashed.length > 0 ? (
+            <View style={{ marginTop: Spacing[6] }}>
+              <SectionHeader title="Trash" subtitle="Restorable for 7 days" />
+              {trashed.map((folder) => (
+                <View key={folder.id} style={styles.folderCard}>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={{ fontFamily: FontFamily.bodyBold }}>
+                      {folder.folder_name}
+                    </AppText>
+                    <AppText variant="muted">In trash</AppText>
+                  </View>
+                  <Pressable
+                    onPress={async () => {
+                      if (!userId) return;
+                      const result = await restoreFolder(supabase, userId, folder.id);
+                      if (result.error) Alert.alert('Error', result.error);
+                      else await load();
+                    }}
+                    hitSlop={8}
+                    style={styles.newBtn}>
+                    <AppText style={styles.newBtnText}>Restore</AppText>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {favorites.length > 0 ? (
             <View style={{ marginTop: Spacing[6] }}>
@@ -222,47 +310,94 @@ export default function CookbooksScreen() {
         </View>
       </ScrollView>
 
-      <Modal
+      <NameModal
         visible={modalOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setModalOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setModalOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation?.()}>
-            <AppText variant="title" style={{ marginBottom: Spacing[2] }}>
-              New Folder
-            </AppText>
-            <AppText variant="muted" style={{ marginBottom: Spacing[4] }}>
-              Enter folder name
-            </AppText>
-            <TextInput
-              autoFocus
-              placeholder="e.g. Weeknight dinners"
-              placeholderTextColor={Colors.gray500}
-              style={styles.input}
-              value={newFolder}
-              onChangeText={setNewFolder}
-              onSubmitEditing={onCreateFolder}
-            />
-            <View style={styles.modalActions}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  title="Cancel"
-                  variant="secondary"
-                  onPress={() => {
-                    setModalOpen(false);
-                    setNewFolder('');
-                  }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button title="Create" loading={creating} onPress={onCreateFolder} />
-              </View>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        title="New Folder"
+        subtitle="Enter folder name"
+        placeholder="e.g. Weeknight dinners"
+        value={newFolder}
+        onChangeText={setNewFolder}
+        loading={creating}
+        confirmLabel="Create"
+        onClose={() => {
+          setModalOpen(false);
+          setNewFolder('');
+        }}
+        onConfirm={onCreateFolder}
+      />
+
+      <NameModal
+        visible={renameTarget != null}
+        title="Rename cookbook"
+        subtitle="Enter a new name"
+        placeholder="Folder name"
+        value={renameValue}
+        onChangeText={setRenameValue}
+        loading={renaming}
+        confirmLabel="Save"
+        onClose={() => {
+          setRenameTarget(null);
+          setRenameValue('');
+        }}
+        onConfirm={onRename}
+      />
     </Screen>
+  );
+}
+
+function NameModal({
+  visible,
+  title,
+  subtitle,
+  placeholder,
+  value,
+  onChangeText,
+  loading,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  title: string;
+  subtitle: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  loading: boolean;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation?.()}>
+          <AppText variant="title" style={{ marginBottom: Spacing[2] }}>
+            {title}
+          </AppText>
+          <AppText variant="muted" style={{ marginBottom: Spacing[4] }}>
+            {subtitle}
+          </AppText>
+          <TextInput
+            autoFocus
+            placeholder={placeholder}
+            placeholderTextColor={Colors.gray500}
+            style={styles.input}
+            value={value}
+            onChangeText={onChangeText}
+            onSubmitEditing={onConfirm}
+          />
+          <View style={styles.modalActions}>
+            <View style={{ flex: 1 }}>
+              <Button title="Cancel" variant="secondary" onPress={onClose} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button title={confirmLabel} loading={loading} onPress={onConfirm} />
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 

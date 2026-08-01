@@ -3,11 +3,22 @@ import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native';
 
+import { DateField, toYmd } from '@/components/date-field';
 import { CalendarIcon } from '@/components/icons';
+import { RecipePickerSheet } from '@/components/recipe-picker-sheet';
 import {
   AppText,
+  Button,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -26,7 +37,13 @@ import {
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
-import { fetchMealPlan, type MealPlanDay } from '@/lib/kitchen';
+import {
+  createOrUpdateMealDate,
+  deleteMealDate,
+  fetchMealPlan,
+  type MealPlanDay,
+} from '@/lib/kitchen';
+import type { RecipeListItem } from '@/lib/types';
 import { useWebApi } from '@/lib/web-api';
 
 const placeholder = require('../../../../assets/brand/recipe-placeholder.png');
@@ -34,7 +51,7 @@ const placeholder = require('../../../../assets/brand/recipe-placeholder.png');
 export default function CalendarScreen() {
   const { userId } = useAuth();
   const { isPro, loading: entitlementsLoading } = useEntitlements();
-  const { billingUrl, calendarUrl } = useWebApi();
+  const { billingUrl } = useWebApi();
   const supabase = useSupabase();
   const router = useRouter();
 
@@ -42,6 +59,12 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState(toYmd(new Date()));
+  const [selectedRecipe, setSelectedRecipe] = useState<RecipeListItem | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId || !isPro) return;
@@ -71,6 +94,57 @@ export default function CalendarScreen() {
       cancelled = true;
     };
   }, [load, isPro, entitlementsLoading]);
+
+  const openNewSchedule = () => {
+    setEditingEventId(null);
+    setSelectedRecipe(null);
+    setScheduleDate(toYmd(new Date()));
+    setScheduleOpen(true);
+  };
+
+  const openEdit = (day: MealPlanDay) => {
+    setEditingEventId(day.event_id);
+    setScheduleDate(day.date);
+    setSelectedRecipe(day.recipes[0] ?? null);
+    setScheduleOpen(true);
+  };
+
+  const onSaveSchedule = async () => {
+    if (!userId || !selectedRecipe) {
+      Alert.alert('Pick a recipe', 'Choose a recipe to schedule.');
+      return;
+    }
+    setSaving(true);
+    const result = await createOrUpdateMealDate(supabase, userId, {
+      date: scheduleDate,
+      recipePublicId: selectedRecipe.recipe_id,
+      eventId: editingEventId ?? undefined,
+    });
+    setSaving(false);
+    if (result.error) {
+      Alert.alert('Error', result.error);
+      return;
+    }
+    setScheduleOpen(false);
+    await load();
+  };
+
+  const onDelete = (day: MealPlanDay) => {
+    if (!userId) return;
+    const label = day.recipes[0]?.recipe_label ?? 'this meal';
+    Alert.alert('Remove meal?', `Remove “${label}” from the calendar?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await deleteMealDate(supabase, userId, day.event_id);
+          if (result.error) Alert.alert('Error', result.error);
+          else await load();
+        },
+      },
+    ]);
+  };
 
   if (entitlementsLoading || loading) return <LoadingState />;
   if (!isPro) {
@@ -120,35 +194,29 @@ export default function CalendarScreen() {
           />
         }
         ListHeaderComponent={
-          <View style={styles.pageHeader}>
-            <View style={styles.iconChip}>
-              <CalendarIcon size={IconSize.lg} color={Colors.accent} />
+          <View style={{ marginBottom: Spacing[4], gap: Spacing[3] }}>
+            <View style={styles.pageHeader}>
+              <View style={styles.iconChip}>
+                <CalendarIcon size={IconSize.lg} color={Colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppText variant="heading">Meal Calendar</AppText>
+                <AppText variant="muted">See what's cooking next</AppText>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <AppText variant="heading">Meal Calendar</AppText>
-              <AppText variant="muted">See what's cooking next</AppText>
-            </View>
+            <Button title="Schedule meal" onPress={openNewSchedule} />
           </View>
         }
         ListEmptyComponent={
           <EmptyState
             title="Your calendar is ready"
-            message="You don't have any upcoming recipes scheduled yet. Plan meals on the web for now."
+            message="Schedule a meal to plan what's cooking."
             illustration={<CalendarIcon size={56} color={Colors.gray400} />}
-            secondaryAction={
-              calendarUrl
-                ? {
-                    title: 'Plan on web',
-                    onPress: () => {
-                      void Linking.openURL(calendarUrl);
-                    },
-                  }
-                : undefined
-            }
+            primaryAction={{ title: 'Schedule meal', onPress: openNewSchedule }}
           />
         }
         renderItem={({ item }) => {
-          const d = new Date(`${item.meal_date}T12:00:00`);
+          const d = new Date(`${item.date}T12:00:00`);
           const month = d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
           const day = d.getDate();
           return (
@@ -165,6 +233,7 @@ export default function CalendarScreen() {
                     <Pressable
                       key={recipe.id}
                       onPress={() => router.push(`/(app)/recipe/${recipe.id}` as Href)}
+                      onLongPress={() => openEdit(item)}
                       style={({ pressed }) => [
                         styles.recipeRow,
                         pressed && { opacity: 0.85 },
@@ -180,11 +249,68 @@ export default function CalendarScreen() {
                     </Pressable>
                   ))
                 )}
+                <View style={styles.rowActions}>
+                  <Pressable onPress={() => openEdit(item)} hitSlop={8}>
+                    <AppText style={styles.link}>Edit</AppText>
+                  </Pressable>
+                  <Pressable onPress={() => onDelete(item)} hitSlop={8}>
+                    <AppText style={[styles.link, { color: Colors.errorFg }]}>Remove</AppText>
+                  </Pressable>
+                </View>
               </View>
             </View>
           );
         }}
       />
+
+      <Modal
+        visible={scheduleOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setScheduleOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setScheduleOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation?.()}>
+            <AppText variant="title" style={{ marginBottom: Spacing[3] }}>
+              {editingEventId ? 'Edit meal' : 'Schedule meal'}
+            </AppText>
+            <DateField value={scheduleDate} onChange={setScheduleDate} />
+            <AppText variant="label" style={{ marginTop: Spacing[3] }}>
+              Recipe
+            </AppText>
+            <Pressable
+              style={styles.recipePick}
+              onPress={() => setPickerOpen(true)}>
+              <AppText numberOfLines={2}>
+                {selectedRecipe?.recipe_label ?? 'Choose a recipe…'}
+              </AppText>
+            </Pressable>
+            <View style={styles.modalActions}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setScheduleOpen(false)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button title="Save" loading={saving} onPress={onSaveSchedule} />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {userId ? (
+        <RecipePickerSheet
+          visible={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(recipe) => setSelectedRecipe(recipe)}
+          supabase={supabase}
+          userId={userId}
+          isPro={isPro}
+          title="Pick a recipe"
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -195,7 +321,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing[3],
     alignItems: 'center',
-    marginBottom: Spacing[5],
   },
   iconChip: {
     width: 52,
@@ -254,4 +379,38 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.base,
   },
+  rowActions: {
+    flexDirection: 'row',
+    gap: Spacing[4],
+    marginTop: Spacing[1],
+  },
+  link: {
+    color: Colors.accent,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Radius['2xl'],
+    borderTopRightRadius: Radius['2xl'],
+    padding: Spacing[5],
+    paddingBottom: Spacing[10],
+    gap: Spacing[2],
+  },
+  recipePick: {
+    minHeight: HitTarget.min,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing[3],
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+    marginBottom: Spacing[3],
+  },
+  modalActions: { flexDirection: 'row', gap: Spacing[2], marginTop: Spacing[2] },
 });

@@ -21,6 +21,7 @@ export default function AppLayout() {
       }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="recipe/[id]" options={{ title: 'Recipe' }} />
+      <Stack.Screen name="recipe/edit" options={{ title: 'Edit recipe', presentation: 'modal' }} />
       <Stack.Screen name="recipe/create" options={{ title: 'New recipe', presentation: 'modal' }} />
       <Stack.Screen name="recipe/import" options={{ title: 'Import URL', presentation: 'modal' }} />
       <Stack.Screen name="cookbook/[folderId]" options={{ title: 'Cookbook' }} />

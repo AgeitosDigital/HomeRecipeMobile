@@ -40,10 +40,19 @@ import {
   clearCheckedGroceryItems,
   deleteGroceryItem,
   fetchGroceryItems,
+  setAllGroceryItemsChecked,
   toggleGroceryItem,
 } from '@/lib/kitchen';
-import type { GroceryItem } from '@/lib/types';
+import type { GroceryCategory, GroceryItem } from '@/lib/types';
 import { useWebApi } from '@/lib/web-api';
+
+const CATEGORIES: { id: GroceryCategory | null; label: string }[] = [
+  { id: null, label: 'None' },
+  { id: 'produce', label: 'Produce' },
+  { id: 'dairy', label: 'Dairy' },
+  { id: 'pantry', label: 'Pantry' },
+  { id: 'condiments', label: 'Condiments' },
+];
 
 export default function GroceryScreen() {
   const { userId } = useAuth();
@@ -53,6 +62,7 @@ export default function GroceryScreen() {
 
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [draft, setDraft] = useState('');
+  const [category, setCategory] = useState<GroceryCategory | null>(null);
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,11 +100,14 @@ export default function GroceryScreen() {
   const onAdd = async () => {
     if (!userId || !draft.trim()) return;
     setAdding(true);
-    const result = await addGroceryItem(supabase, userId, draft);
+    const result = await addGroceryItem(supabase, userId, draft, category);
     setAdding(false);
     if (result.error) {
       setError(result.error);
       return;
+    }
+    if (result.duplicate) {
+      Alert.alert('Already on list', 'That item is already on your grocery list.');
     }
     setDraft('');
     await load();
@@ -119,6 +132,12 @@ export default function GroceryScreen() {
         },
       ]
     );
+  };
+
+  const onCheckAll = async (checked: boolean) => {
+    if (!userId || items.length === 0) return;
+    await setAllGroceryItemsChecked(supabase, userId, checked);
+    await load();
   };
 
   if (entitlementsLoading || loading) return <LoadingState />;
@@ -152,7 +171,9 @@ export default function GroceryScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <AppText variant="heading">Grocery List</AppText>
-            <AppText variant="muted">Keep track of everything you need. Check off as you shop.</AppText>
+            <AppText variant="muted">
+              Keep track of everything you need. Check off as you shop.
+            </AppText>
           </View>
         </View>
 
@@ -169,11 +190,37 @@ export default function GroceryScreen() {
           <Button title="Add" loading={adding} onPress={onAdd} />
         </View>
 
-        {checkedCount > 0 ? (
-          <Pressable onPress={onClearChecked} hitSlop={8} style={styles.clearBtn}>
-            <AppText style={styles.clearText}>Clear checked ({checkedCount})</AppText>
-          </Pressable>
-        ) : null}
+        <View style={styles.catRow}>
+          {CATEGORIES.map((c) => (
+            <Pressable
+              key={c.label}
+              onPress={() => setCategory(c.id)}
+              style={[styles.catChip, category === c.id && styles.catChipActive]}>
+              <AppText
+                style={[styles.catText, category === c.id && styles.catTextActive]}>
+                {c.label}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.toolbar}>
+          {items.length > 0 ? (
+            <>
+              <Pressable onPress={() => void onCheckAll(true)} hitSlop={8}>
+                <AppText style={styles.clearText}>Check all</AppText>
+              </Pressable>
+              <Pressable onPress={() => void onCheckAll(false)} hitSlop={8}>
+                <AppText style={styles.clearText}>Uncheck all</AppText>
+              </Pressable>
+            </>
+          ) : null}
+          {checkedCount > 0 ? (
+            <Pressable onPress={onClearChecked} hitSlop={8}>
+              <AppText style={styles.clearText}>Clear checked ({checkedCount})</AppText>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <FlatList
@@ -202,7 +249,11 @@ export default function GroceryScreen() {
           <View style={[styles.row, item.checked && styles.rowChecked]}>
             <Checkbox
               checked={item.checked}
-              label={item.item_text}
+              label={
+                item.category
+                  ? `${item.item_text} · ${item.category}`
+                  : item.item_text
+              }
               onPress={async () => {
                 if (!userId) return;
                 await toggleGroceryItem(supabase, userId, item.id, !item.checked);
@@ -266,10 +317,39 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     minHeight: HitTarget.min,
   },
-  clearBtn: {
-    alignSelf: 'flex-start',
-    minHeight: HitTarget.min - 8,
+  catRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing[2],
+  },
+  catChip: {
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[2],
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    minHeight: HitTarget.min - 12,
     justifyContent: 'center',
+  },
+  catChipActive: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accentMutedBg,
+  },
+  catText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.gray600,
+  },
+  catTextActive: {
+    color: Colors.accent,
+  },
+  toolbar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing[4],
+    minHeight: HitTarget.min - 8,
+    alignItems: 'center',
   },
   clearText: {
     color: Colors.accent,

@@ -43,8 +43,10 @@ export type RecipeDetail = RecipeListItem & {
 
 export type FolderRow = {
   id: string;
-  name: string;
+  folder_name: string;
   user_id: string;
+  cover_image_url?: string | null;
+  deleted_at?: string | null;
   created_at?: string;
 };
 
@@ -56,8 +58,11 @@ export type GroceryItem = {
   category?: string | null;
 };
 
+export type GroceryCategory = 'produce' | 'dairy' | 'pantry' | 'condiments';
+
 export type MealDateRow = {
   id: string;
-  meal_date: string;
+  date: string;
+  event_id: string;
   user_id: string;
 };

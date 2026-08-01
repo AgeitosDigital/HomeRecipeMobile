@@ -36,8 +36,20 @@ export function createClerkSupabaseClient(
 
   return createSupabaseClient(url, key, {
     accessToken: async () => {
-      const token = await withTimeout(Promise.resolve(getToken()), 8000, 'Clerk getToken');
-      return token ?? null;
+      try {
+        const token = await withTimeout(
+          Promise.resolve(getToken()),
+          8000,
+          'Clerk getToken'
+        );
+        return token ?? null;
+      } catch (err) {
+        console.warn(
+          '[supabase] Clerk getToken failed:',
+          err instanceof Error ? err.message : err
+        );
+        return null;
+      }
     },
   });
 }
