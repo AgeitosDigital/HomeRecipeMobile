@@ -5,8 +5,8 @@ import { FlatList, StyleSheet, TextInput, View } from 'react-native';
 
 import { SearchIcon } from '@/components/icons';
 import { RecipeCard } from '@/components/recipe-card';
-import { AppText, EmptyState, Screen } from '@/components/ui';
-import { Colors, FontFamily, HitTarget, Radius, Spacing } from '@/constants/theme';
+import { AppText, EmptyState, Screen, Surface } from '@/components/ui';
+import { Colors, FontFamily, HitTarget, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
 import { searchRecipes } from '@/lib/recipes';
@@ -43,17 +43,19 @@ export default function SearchScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <View style={styles.searchRow}>
-          <SearchIcon size={18} color={Colors.gray500} />
-          <TextInput
-            autoFocus
-            placeholder={isPro ? 'Search all recipes' : 'Search your recipes'}
-            placeholderTextColor={Colors.gray500}
-            style={styles.input}
-            value={query}
-            onChangeText={setQuery}
-          />
-        </View>
+        <Surface style={styles.searchSurface} padded={false} elevated>
+          <View style={styles.searchRow}>
+            <SearchIcon size={18} color={Colors.accent} />
+            <TextInput
+              autoFocus
+              placeholder={isPro ? 'Search all recipes' : 'Search your recipes'}
+              placeholderTextColor={Colors.gray500}
+              style={styles.input}
+              value={query}
+              onChangeText={setQuery}
+            />
+          </View>
+        </Surface>
         {error ? <AppText variant="error">{error}</AppText> : null}
         {searching ? <AppText variant="muted">Searching…</AppText> : null}
       </View>
@@ -63,9 +65,17 @@ export default function SearchScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           query.trim() ? (
-            <EmptyState title="No matches" message="Try another name." />
+            <EmptyState
+              title="No matches"
+              message="Try another name or check your spelling."
+              illustration={<SearchIcon size={48} color={Colors.gray400} />}
+            />
           ) : (
-            <EmptyState title="Search recipes" message="Type a recipe name to begin." />
+            <EmptyState
+              title="Search recipes"
+              message="Type a recipe name to find something delicious."
+              illustration={<SearchIcon size={48} color={Colors.gray400} />}
+            />
           )
         }
         renderItem={({ item }) => (
@@ -81,16 +91,16 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   header: { padding: Spacing[4], gap: Spacing[2] },
+  searchSurface: {
+    borderRadius: Radius.full,
+    ...Shadows.soft,
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[2],
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.full,
     paddingHorizontal: Spacing[4],
-    minHeight: HitTarget.min,
-    backgroundColor: Colors.white,
+    minHeight: HitTarget.min + 4,
   },
   input: {
     flex: 1,

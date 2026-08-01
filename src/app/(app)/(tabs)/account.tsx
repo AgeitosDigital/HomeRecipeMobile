@@ -3,14 +3,14 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, LoadingState, Screen } from '@/components/ui';
+import { AccountIcon, ChevronRightIcon } from '@/components/icons';
+import { AppText, Button, LoadingState, PageHeader, Screen, Surface } from '@/components/ui';
 import {
   Colors,
   FontFamily,
   FontSize,
   HitTarget,
-  Radius,
-  Shadows,
+  IconSize,
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
@@ -46,19 +46,25 @@ export default function AccountScreen() {
   return (
     <Screen edges={['top', 'left', 'right']}>
       <View style={styles.container}>
-        <AppText variant="heading">Account</AppText>
+        <PageHeader
+          icon={<AccountIcon size={IconSize.lg} color={Colors.accent} />}
+          title="Account"
+          subtitle="Profile, plan, and session"
+        />
 
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <AppText style={styles.avatarText}>{initials}</AppText>
+        <Surface style={styles.profileCard} padded={false}>
+          <View style={styles.profileInner}>
+            <View style={styles.avatar}>
+              <AppText style={styles.avatarText}>{initials}</AppText>
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText variant="title">{name}</AppText>
+              <AppText variant="muted">{email}</AppText>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <AppText variant="title">{name}</AppText>
-            <AppText variant="muted">{email}</AppText>
-          </View>
-        </View>
+        </Surface>
 
-        <View style={styles.group}>
+        <Surface>
           <AppText variant="label" style={styles.groupLabel}>
             Plan
           </AppText>
@@ -66,11 +72,7 @@ export default function AccountScreen() {
             <AppText style={{ fontFamily: FontFamily.bodyMedium }}>
               {isPro ? 'Pro' : 'Free'}
             </AppText>
-            <View
-              style={[
-                styles.badge,
-                isPro ? styles.badgePro : styles.badgeFree,
-              ]}>
+            <View style={[styles.badge, isPro ? styles.badgePro : styles.badgeFree]}>
               <AppText
                 style={{
                   color: isPro ? Colors.brandLimeFg : Colors.foregroundMuted,
@@ -83,13 +85,14 @@ export default function AccountScreen() {
           </View>
 
           {!isPro && billingUrl ? (
-            <Pressable
-              onPress={() => {
-                void Linking.openURL(billingUrl);
-              }}
-              style={({ pressed }) => [styles.upgradeBtn, pressed && { opacity: 0.85 }]}>
-              <AppText style={styles.upgradeText}>Upgrade to Pro</AppText>
-            </Pressable>
+            <View style={{ marginTop: Spacing[3] }}>
+              <Button
+                title="Upgrade to Pro"
+                onPress={() => {
+                  void Linking.openURL(billingUrl);
+                }}
+              />
+            </View>
           ) : null}
 
           {billingUrl ? (
@@ -99,17 +102,17 @@ export default function AccountScreen() {
               }}
               style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}>
               <AppText>Manage billing on web</AppText>
-              <AppText variant="muted">→</AppText>
+              <ChevronRightIcon size={20} color={Colors.gray500} />
             </Pressable>
           ) : null}
-        </View>
+        </Surface>
 
-        <View style={styles.group}>
+        <Surface>
           <AppText variant="label" style={styles.groupLabel}>
             Session
           </AppText>
           <Button title="Sign out" variant="danger" onPress={onSignOut} />
-        </View>
+        </Surface>
 
         <AppText variant="muted" style={styles.version}>
           HomeRecipe · v{version}
@@ -123,18 +126,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: Spacing[4],
-    gap: Spacing[5],
+    gap: Spacing[4],
   },
-  profileCard: {
+  profileCard: {},
+  profileInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[3],
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius['2xl'],
     padding: Spacing[4],
-    backgroundColor: Colors.white,
-    ...Shadows.soft,
   },
   avatar: {
     width: 56,
@@ -149,29 +148,22 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xl,
     color: Colors.accent,
   },
-  group: {
-    gap: Spacing[3],
-  },
   groupLabel: {
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     fontSize: FontSize.xs,
+    marginBottom: Spacing[3],
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: HitTarget.min,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing[4],
   },
   badge: {
     paddingHorizontal: Spacing[3],
     paddingVertical: Spacing[1],
-    borderRadius: Radius.full,
+    borderRadius: 50,
   },
   badgePro: {
     backgroundColor: 'rgba(149, 198, 35, 0.2)',
@@ -179,28 +171,12 @@ const styles = StyleSheet.create({
   badgeFree: {
     backgroundColor: Colors.gray100,
   },
-  upgradeBtn: {
-    minHeight: HitTarget.min,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  upgradeText: {
-    color: Colors.white,
-    fontFamily: FontFamily.bodyBold,
-    fontSize: FontSize.base,
-  },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: HitTarget.min,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing[4],
+    marginTop: Spacing[2],
   },
   version: {
     textAlign: 'center',

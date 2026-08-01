@@ -5,8 +5,10 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
   type TextProps,
   type ViewProps,
+  type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,6 +18,7 @@ import {
   FontSize,
   HitTarget,
   Radius,
+  Shadows,
   Spacing,
 } from '@/constants/theme';
 
@@ -32,7 +35,7 @@ export function Screen({
 }
 
 type AppTextProps = TextProps & {
-  variant?: 'body' | 'muted' | 'title' | 'heading' | 'brand' | 'label' | 'error';
+  variant?: 'body' | 'muted' | 'title' | 'section' | 'heading' | 'brand' | 'label' | 'error';
 };
 
 export function AppText({ variant = 'body', style, ...props }: AppTextProps) {
@@ -45,14 +48,21 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
+  compact,
 }: {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft';
   disabled?: boolean;
   loading?: boolean;
+  /** Tighter padding for inline row actions like "+ New" */
+  compact?: boolean;
 }) {
   const isDisabled = disabled || loading;
+  const spinnerColor =
+    variant === 'secondary' || variant === 'ghost' || variant === 'soft'
+      ? Colors.accent
+      : Colors.white;
   return (
     <Pressable
       disabled={isDisabled}
@@ -60,29 +70,109 @@ export function Button({
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.button,
+        compact && styles.buttonCompact,
         buttonVariants[variant],
         isDisabled && styles.buttonDisabled,
         pressed && !isDisabled && { opacity: 0.75 },
       ]}>
       {loading ? (
-        <ActivityIndicator
-          color={
-            variant === 'secondary' || variant === 'ghost' ? Colors.accent : Colors.white
-          }
-        />
+        <ActivityIndicator color={spinnerColor} />
       ) : (
         <AppText
           style={[
             styles.buttonText,
-            variant === 'secondary' || variant === 'ghost'
-              ? { color: Colors.foreground }
-              : { color: Colors.white },
+            compact && styles.buttonTextCompact,
+            (variant === 'secondary' || variant === 'soft') && { color: Colors.foreground },
             variant === 'ghost' && { color: Colors.accent },
+            variant === 'soft' && { color: Colors.accent },
+            (variant === 'primary' || variant === 'danger') && { color: Colors.white },
           ]}>
           {title}
         </AppText>
       )}
     </Pressable>
+  );
+}
+
+export function Surface({
+  children,
+  style,
+  padded = true,
+  elevated = true,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  padded?: boolean;
+  elevated?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.surface,
+        padded && styles.surfacePadded,
+        elevated ? Shadows.soft : styles.surfaceBordered,
+        style,
+      ]}>
+      {children}
+    </View>
+  );
+}
+
+export type IconCircleTone = 'blue' | 'green' | 'red' | 'purple' | 'accent';
+
+export function IconCircle({
+  children,
+  tone = 'accent',
+  size = 44,
+}: {
+  children: ReactNode;
+  tone?: IconCircleTone;
+  size?: number;
+}) {
+  return (
+    <View
+      style={[
+        styles.iconCircle,
+        iconCircleTones[tone],
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}>
+      {children}
+    </View>
+  );
+}
+
+export function PageHeader({
+  icon,
+  title,
+  subtitle,
+  action,
+  iconTone = 'accent',
+}: {
+  icon?: ReactNode;
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  iconTone?: IconCircleTone;
+}) {
+  return (
+    <View style={styles.pageHeader}>
+      <View style={styles.pageHeaderMain}>
+        {icon ? (
+          <View style={[styles.pageHeaderChip, pageHeaderChipTones[iconTone]]}>{icon}</View>
+        ) : null}
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading" style={styles.pageHeaderTitle}>
+            {title}
+          </AppText>
+          {subtitle ? (
+            <AppText variant="muted" style={{ marginTop: 4 }}>
+              {subtitle}
+            </AppText>
+          ) : null}
+        </View>
+      </View>
+      {action}
+    </View>
   );
 }
 
@@ -117,15 +207,18 @@ export function SectionHeader({
   title,
   subtitle,
   action,
+  dense,
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
+  /** Web-like 18/medium section title */
+  dense?: boolean;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
-        <AppText variant="title">{title}</AppText>
+        <AppText variant={dense ? 'section' : 'title'}>{title}</AppText>
         {subtitle ? (
           <AppText variant="muted" style={{ marginTop: 4 }}>
             {subtitle}
@@ -302,6 +395,11 @@ const textVariants = StyleSheet.create({
     fontFamily: FontFamily.bodyBold,
     fontSize: FontSize.xl,
   },
+  section: {
+    color: Colors.foreground,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.lg,
+  },
   heading: {
     color: Colors.foreground,
     fontFamily: FontFamily.display,
@@ -326,8 +424,27 @@ const buttonVariants = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  soft: {
+    backgroundColor: Colors.accentMutedBg,
+  },
   ghost: { backgroundColor: 'transparent' },
   danger: { backgroundColor: Colors.errorFg },
+});
+
+const iconCircleTones = StyleSheet.create({
+  blue: { backgroundColor: 'rgba(51, 101, 138, 0.12)' },
+  green: { backgroundColor: 'rgba(149, 198, 35, 0.15)' },
+  red: { backgroundColor: 'rgba(220, 33, 0, 0.10)' },
+  purple: { backgroundColor: 'rgba(123, 94, 167, 0.12)' },
+  accent: { backgroundColor: Colors.accentMutedBg },
+});
+
+const pageHeaderChipTones = StyleSheet.create({
+  blue: { backgroundColor: 'rgba(51, 101, 138, 0.12)' },
+  green: { backgroundColor: 'rgba(149, 198, 35, 0.15)' },
+  red: { backgroundColor: Colors.iconChipBg },
+  purple: { backgroundColor: 'rgba(123, 94, 167, 0.12)' },
+  accent: { backgroundColor: Colors.iconChipBg },
 });
 
 const styles = StyleSheet.create({
@@ -344,12 +461,60 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: HitTarget.min,
   },
+  buttonCompact: {
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[3] + 2,
+    minHeight: HitTarget.min,
+    alignSelf: 'flex-start',
+  },
   buttonDisabled: {
     opacity: 0.45,
   },
   buttonText: {
     fontFamily: FontFamily.bodyBold,
     fontSize: FontSize.base,
+  },
+  buttonTextCompact: {
+    fontSize: FontSize.sm,
+  },
+  surface: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius['2xl'],
+    overflow: 'hidden',
+  },
+  surfacePadded: {
+    padding: Spacing[4],
+  },
+  surfaceBordered: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  iconCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing[3],
+    marginBottom: Spacing[5],
+  },
+  pageHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+  },
+  pageHeaderChip: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageHeaderTitle: {
+    fontSize: FontSize['2xl'],
   },
   iconButton: {
     width: HitTarget.min,

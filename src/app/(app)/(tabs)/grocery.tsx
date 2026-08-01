@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/expo';
 import * as Linking from 'expo-linking';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 
-import { GroceryIcon } from '@/components/icons';
+import { GroceryIcon, TrashIcon } from '@/components/icons';
 import {
   AppText,
   Button,
@@ -20,8 +20,10 @@ import {
   ErrorState,
   IconButton,
   LoadingState,
+  PageHeader,
   ProLockState,
   Screen,
+  Surface,
 } from '@/components/ui';
 import {
   Colors,
@@ -30,7 +32,6 @@ import {
   HitTarget,
   IconSize,
   Radius,
-  Shadows,
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
@@ -59,6 +60,7 @@ export default function GroceryScreen() {
   const { isPro, loading: entitlementsLoading } = useEntitlements();
   const { billingUrl } = useWebApi();
   const supabase = useSupabase();
+  const inputRef = useRef<TextInput>(null);
 
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [draft, setDraft] = useState('');
@@ -165,20 +167,15 @@ export default function GroceryScreen() {
   return (
     <Screen edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <View style={styles.pageHeader}>
-          <View style={styles.iconCircle}>
-            <GroceryIcon size={IconSize.lg} color={Colors.accent} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <AppText variant="heading">Grocery List</AppText>
-            <AppText variant="muted">
-              Keep track of everything you need. Check off as you shop.
-            </AppText>
-          </View>
-        </View>
+        <PageHeader
+          icon={<GroceryIcon size={IconSize.lg} color={Colors.accent} />}
+          title="Grocery List"
+          subtitle="Keep track of everything you need. Check off as you shop."
+        />
 
         <View style={styles.addRow}>
           <TextInput
+            ref={inputRef}
             placeholder="Add an item…"
             placeholderTextColor={Colors.gray500}
             style={styles.input}
@@ -196,8 +193,7 @@ export default function GroceryScreen() {
               key={c.label}
               onPress={() => setCategory(c.id)}
               style={[styles.catChip, category === c.id && styles.catChipActive]}>
-              <AppText
-                style={[styles.catText, category === c.id && styles.catTextActive]}>
+              <AppText style={[styles.catText, category === c.id && styles.catTextActive]}>
                 {c.label}
               </AppText>
             </Pressable>
@@ -243,42 +239,48 @@ export default function GroceryScreen() {
             title="Your grocery list is empty"
             message="Add items from recipes or type above."
             illustration={<GroceryIcon size={56} color={Colors.gray400} />}
+            primaryAction={{
+              title: 'Add an item',
+              onPress: () => inputRef.current?.focus(),
+            }}
           />
         }
         renderItem={({ item }) => (
-          <View style={[styles.row, item.checked && styles.rowChecked]}>
-            <Checkbox
-              checked={item.checked}
-              label={
-                item.category
-                  ? `${item.item_text} · ${item.category}`
-                  : item.item_text
-              }
-              onPress={async () => {
-                if (!userId) return;
-                await toggleGroceryItem(supabase, userId, item.id, !item.checked);
-                await load();
-              }}
-            />
-            <IconButton
-              accessibilityLabel={`Delete ${item.item_text}`}
-              onPress={() => {
-                if (!userId) return;
-                Alert.alert('Delete item', `Remove “${item.item_text}”?`, [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await deleteGroceryItem(supabase, userId, item.id);
-                      await load();
+          <Surface style={[styles.row, item.checked && styles.rowChecked]} padded={false}>
+            <View style={styles.rowInner}>
+              <Checkbox
+                checked={item.checked}
+                label={
+                  item.category
+                    ? `${item.item_text} · ${item.category}`
+                    : item.item_text
+                }
+                onPress={async () => {
+                  if (!userId) return;
+                  await toggleGroceryItem(supabase, userId, item.id, !item.checked);
+                  await load();
+                }}
+              />
+              <IconButton
+                accessibilityLabel={`Delete ${item.item_text}`}
+                onPress={() => {
+                  if (!userId) return;
+                  Alert.alert('Delete item', `Remove “${item.item_text}”?`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await deleteGroceryItem(supabase, userId, item.id);
+                        await load();
+                      },
                     },
-                  },
-                ]);
-              }}>
-              <AppText style={{ color: Colors.errorFg, fontSize: FontSize.sm }}>Delete</AppText>
-            </IconButton>
-          </View>
+                  ]);
+                }}>
+                <TrashIcon size={18} color={Colors.errorFg} />
+              </IconButton>
+            </View>
+          </Surface>
         )}
       />
     </Screen>
@@ -290,19 +292,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[4],
     paddingTop: Spacing[2],
     gap: Spacing[3],
-  },
-  pageHeader: {
-    flexDirection: 'row',
-    gap: Spacing[3],
-    alignItems: 'center',
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.accentMutedBg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   addRow: { flexDirection: 'row', gap: Spacing[2], alignItems: 'center' },
   input: {
@@ -326,14 +315,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[3],
     paddingVertical: Spacing[2],
     borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
     backgroundColor: Colors.white,
     minHeight: HitTarget.min - 12,
     justifyContent: 'center',
   },
   catChipActive: {
-    borderColor: Colors.accent,
     backgroundColor: Colors.accentMutedBg,
   },
   catText: {
@@ -358,20 +344,16 @@ const styles = StyleSheet.create({
   },
   list: { padding: Spacing[4], paddingBottom: Spacing[12] },
   row: {
+    marginBottom: Spacing[2],
+  },
+  rowChecked: {
+    backgroundColor: Colors.backgroundMuted,
+  },
+  rowInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[2],
     paddingVertical: Spacing[2],
     paddingHorizontal: Spacing[3],
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing[2],
-    ...Shadows.soft,
-  },
-  rowChecked: {
-    backgroundColor: Colors.backgroundMuted,
-    borderColor: Colors.gray200,
   },
 });

@@ -19,18 +19,18 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  PageHeader,
   Screen,
   SectionHeader,
   Skeleton,
+  Surface,
 } from '@/components/ui';
 import {
   Colors,
   FontFamily,
-  FontSize,
   HitTarget,
   IconSize,
   Radius,
-  Shadows,
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
@@ -177,8 +177,8 @@ export default function CookbooksScreen() {
             width="70%"
             style={{ marginTop: Spacing[2], marginBottom: Spacing[5] }}
           />
-          <Skeleton height={64} style={{ marginBottom: Spacing[2], borderRadius: Radius.lg }} />
-          <Skeleton height={64} style={{ borderRadius: Radius.lg }} />
+          <Skeleton height={72} style={{ marginBottom: Spacing[2], borderRadius: Radius['2xl'] }} />
+          <Skeleton height={72} style={{ borderRadius: Radius['2xl'] }} />
         </View>
       </Screen>
     );
@@ -191,122 +191,115 @@ export default function CookbooksScreen() {
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled">
-        <View>
-          <View style={styles.pageHeader}>
-            <View style={styles.iconChip}>
-              <CookbookIcon size={IconSize.lg} color={Colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText variant="heading">Cookbooks</AppText>
-              <AppText variant="muted">
-                Discover, organize and save your favorite recipes. Long-press a folder to rename
-                or trash.
-              </AppText>
-            </View>
-          </View>
+        <PageHeader
+          icon={<CookbookIcon size={IconSize.lg} color={Colors.accent} />}
+          title="Cookbooks"
+          subtitle="Discover, organize and save your favorite recipes. Long-press a folder to rename or trash."
+        />
 
-          <SectionHeader
-            title="Your Cookbooks"
-            subtitle={
-              folders.length > 0
-                ? `${folders.length} folder${folders.length === 1 ? '' : 's'}`
-                : undefined
-            }
-            action={
-              <Pressable
-                onPress={() => setModalOpen(true)}
-                style={({ pressed }) => [styles.newBtn, pressed && { opacity: 0.8 }]}
-                hitSlop={8}>
-                <AppText style={styles.newBtnText}>+ New</AppText>
-              </Pressable>
-            }
+        <SectionHeader
+          dense
+          title="Your Cookbooks"
+          subtitle={
+            folders.length > 0
+              ? `${folders.length} folder${folders.length === 1 ? '' : 's'}`
+              : undefined
+          }
+          action={
+            <Button title="+ New" variant="soft" compact onPress={() => setModalOpen(true)} />
+          }
+        />
+
+        {folders.length === 0 ? (
+          <EmptyState
+            title="No cookbooks yet"
+            message="Create a folder to organize recipes."
+            illustration={<EmptyCookbookArt size={96} color={Colors.gray400} />}
+            primaryAction={{
+              title: 'Create cookbook',
+              onPress: () => setModalOpen(true),
+            }}
           />
-
-          {folders.length === 0 ? (
-            <EmptyState
-              title="No cookbooks yet"
-              message="Create a folder to organize recipes."
-              illustration={<EmptyCookbookArt size={96} color={Colors.gray400} />}
-              primaryAction={{
-                title: 'Create cookbook',
-                onPress: () => setModalOpen(true),
-              }}
-            />
-          ) : (
-            folders.map((folder) => (
-              <Pressable
-                key={folder.id}
-                style={({ pressed }) => [styles.folderCard, pressed && { opacity: 0.9 }]}
-                onPress={() => router.push(`/(app)/cookbook/${folder.id}` as Href)}
-                onLongPress={() => onFolderLongPress(folder)}>
-                <View style={styles.folderIcon}>
-                  <CookbookIcon size={18} color={Colors.accent} />
+        ) : (
+          folders.map((folder) => (
+            <Pressable
+              key={folder.id}
+              style={({ pressed }) => pressed && { opacity: 0.9 }}
+              onPress={() => router.push(`/(app)/cookbook/${folder.id}` as Href)}
+              onLongPress={() => onFolderLongPress(folder)}>
+              <Surface style={styles.folderCard} padded={false}>
+                <View style={styles.folderInner}>
+                  <View style={styles.folderIcon}>
+                    <CookbookIcon size={18} color={Colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={{ fontFamily: FontFamily.bodyBold }}>
+                      {folder.folder_name}
+                    </AppText>
+                    <AppText variant="muted">
+                      {counts[folder.id] ?? 0} recipe
+                      {(counts[folder.id] ?? 0) === 1 ? '' : 's'}
+                    </AppText>
+                  </View>
+                  <ChevronRightIcon size={20} color={Colors.gray500} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <AppText style={{ fontFamily: FontFamily.bodyBold }}>
-                    {folder.folder_name}
-                  </AppText>
-                  <AppText variant="muted">
-                    {counts[folder.id] ?? 0} recipe
-                    {(counts[folder.id] ?? 0) === 1 ? '' : 's'}
-                  </AppText>
-                </View>
-                <ChevronRightIcon size={20} color={Colors.gray500} />
-              </Pressable>
-            ))
-          )}
+              </Surface>
+            </Pressable>
+          ))
+        )}
 
-          {trashed.length > 0 ? (
-            <View style={{ marginTop: Spacing[6] }}>
-              <SectionHeader title="Trash" subtitle="Restorable for 7 days" />
-              {trashed.map((folder) => (
-                <View key={folder.id} style={styles.folderCard}>
+        {trashed.length > 0 ? (
+          <View style={{ marginTop: Spacing[6] }}>
+            <SectionHeader dense title="Trash" subtitle="Restorable for 7 days" />
+            {trashed.map((folder) => (
+              <Surface key={folder.id} style={styles.folderCard} padded={false}>
+                <View style={styles.folderInner}>
                   <View style={{ flex: 1 }}>
                     <AppText style={{ fontFamily: FontFamily.bodyBold }}>
                       {folder.folder_name}
                     </AppText>
                     <AppText variant="muted">In trash</AppText>
                   </View>
-                  <Pressable
+                  <Button
+                    title="Restore"
+                    variant="soft"
+                    compact
                     onPress={async () => {
                       if (!userId) return;
                       const result = await restoreFolder(supabase, userId, folder.id);
                       if (result.error) Alert.alert('Error', result.error);
                       else await load();
                     }}
-                    hitSlop={8}
-                    style={styles.newBtn}>
-                    <AppText style={styles.newBtnText}>Restore</AppText>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {favorites.length > 0 ? (
-            <View style={{ marginTop: Spacing[6] }}>
-              <SectionHeader title="Liked Recipes" subtitle="Your hearted recipes" />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: Spacing[2] }}>
-                {favorites.map((item) => (
-                  <RecipeCard
-                    key={item.id}
-                    recipe={item}
-                    favorited
-                    compact
-                    onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
                   />
-                ))}
-              </ScrollView>
-            </View>
-          ) : folders.length > 0 ? (
-            <View style={{ marginTop: Spacing[6] }}>
-              <SectionHeader title="Liked Recipes" />
-              <AppText variant="muted">Heart recipes from Home to save them here.</AppText>
-            </View>
-          ) : null}
+                </View>
+              </Surface>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={{ marginTop: Spacing[6] }}>
+          <SectionHeader dense title="Liked Recipes" subtitle="Your hearted recipes" />
+          {favorites.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: Spacing[2] }}>
+              {favorites.map((item) => (
+                <RecipeCard
+                  key={item.id}
+                  recipe={item}
+                  favorited
+                  compact
+                  onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <EmptyState
+              title="No liked recipes yet"
+              message="Heart recipes from Home to save them here."
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -403,45 +396,16 @@ function NameModal({
 
 const styles = StyleSheet.create({
   pad: { padding: Spacing[4] },
-  list: { padding: Spacing[4], paddingBottom: Spacing[12] },
-  pageHeader: {
-    flexDirection: 'row',
-    gap: Spacing[3],
-    alignItems: 'center',
-    marginBottom: Spacing[6],
-  },
-  iconChip: {
-    width: 52,
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.iconChipBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  newBtn: {
-    minHeight: HitTarget.min - 8,
-    paddingHorizontal: Spacing[3],
-    justifyContent: 'center',
-    borderRadius: Radius.md,
-    backgroundColor: Colors.accentMutedBg,
-  },
-  newBtnText: {
-    color: Colors.accent,
-    fontFamily: FontFamily.bodyBold,
-    fontSize: FontSize.sm,
-  },
+  list: { padding: Spacing[4], paddingBottom: Spacing[12], gap: Spacing[2] },
   folderCard: {
+    marginBottom: Spacing[2],
+  },
+  folderInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[3],
     minHeight: HitTarget.min + 16,
     padding: Spacing[4],
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-    marginBottom: Spacing[2],
-    ...Shadows.soft,
   },
   folderIcon: {
     width: 40,

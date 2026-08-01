@@ -14,16 +14,19 @@ import {
 } from 'react-native';
 
 import { DateField, toYmd } from '@/components/date-field';
-import { CalendarIcon } from '@/components/icons';
+import { CalendarIcon, PencilIcon, TrashIcon } from '@/components/icons';
 import { RecipePickerSheet } from '@/components/recipe-picker-sheet';
 import {
   AppText,
   Button,
   EmptyState,
   ErrorState,
+  IconButton,
   LoadingState,
+  PageHeader,
   ProLockState,
   Screen,
+  Surface,
 } from '@/components/ui';
 import {
   Colors,
@@ -32,7 +35,6 @@ import {
   HitTarget,
   IconSize,
   Radius,
-  Shadows,
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
@@ -195,15 +197,11 @@ export default function CalendarScreen() {
         }
         ListHeaderComponent={
           <View style={{ marginBottom: Spacing[4], gap: Spacing[3] }}>
-            <View style={styles.pageHeader}>
-              <View style={styles.iconChip}>
-                <CalendarIcon size={IconSize.lg} color={Colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <AppText variant="heading">Meal Calendar</AppText>
-                <AppText variant="muted">See what's cooking next</AppText>
-              </View>
-            </View>
+            <PageHeader
+              icon={<CalendarIcon size={IconSize.lg} color={Colors.accent} />}
+              title="Meal Calendar"
+              subtitle="See what's cooking next"
+            />
             <Button title="Schedule meal" onPress={openNewSchedule} />
           </View>
         }
@@ -220,45 +218,53 @@ export default function CalendarScreen() {
           const month = d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
           const day = d.getDate();
           return (
-            <View style={styles.dayCard}>
-              <View style={styles.dateBadge}>
-                <AppText style={styles.month}>{month}</AppText>
-                <AppText style={styles.dayNum}>{day}</AppText>
-              </View>
-              <View style={{ flex: 1, gap: Spacing[2] }}>
-                {item.recipes.length === 0 ? (
-                  <AppText variant="muted">No recipes</AppText>
-                ) : (
-                  item.recipes.map((recipe) => (
-                    <Pressable
-                      key={recipe.id}
-                      onPress={() => router.push(`/(app)/recipe/${recipe.id}` as Href)}
-                      onLongPress={() => openEdit(item)}
-                      style={({ pressed }) => [
-                        styles.recipeRow,
-                        pressed && { opacity: 0.85 },
-                      ]}>
-                      <Image
-                        source={recipe.image_url ? { uri: recipe.image_url } : placeholder}
-                        style={styles.thumb}
-                        contentFit="cover"
-                      />
-                      <AppText style={styles.recipe} numberOfLines={2}>
-                        {recipe.recipe_label}
-                      </AppText>
-                    </Pressable>
-                  ))
-                )}
-                <View style={styles.rowActions}>
-                  <Pressable onPress={() => openEdit(item)} hitSlop={8}>
-                    <AppText style={styles.link}>Edit</AppText>
-                  </Pressable>
-                  <Pressable onPress={() => onDelete(item)} hitSlop={8}>
-                    <AppText style={[styles.link, { color: Colors.errorFg }]}>Remove</AppText>
-                  </Pressable>
+            <Surface style={styles.dayCard} padded={false}>
+              <View style={styles.dayInner}>
+                <View style={styles.dateBadge}>
+                  <AppText style={styles.month}>{month}</AppText>
+                  <AppText style={styles.dayNum}>{day}</AppText>
+                </View>
+                <View style={{ flex: 1, gap: Spacing[2] }}>
+                  {item.recipes.length === 0 ? (
+                    <AppText variant="muted">No recipes</AppText>
+                  ) : (
+                    item.recipes.map((recipe) => (
+                      <Pressable
+                        key={recipe.id}
+                        onPress={() => router.push(`/(app)/recipe/${recipe.id}` as Href)}
+                        onLongPress={() => openEdit(item)}
+                        style={({ pressed }) => [
+                          styles.recipeRow,
+                          pressed && { opacity: 0.85 },
+                        ]}>
+                        <Image
+                          source={recipe.image_url ? { uri: recipe.image_url } : placeholder}
+                          style={styles.thumb}
+                          contentFit="cover"
+                        />
+                        <AppText style={styles.recipe} numberOfLines={2}>
+                          {recipe.recipe_label}
+                        </AppText>
+                      </Pressable>
+                    ))
+                  )}
+                  <View style={styles.rowActions}>
+                    <IconButton
+                      accessibilityLabel="Edit meal"
+                      onPress={() => openEdit(item)}
+                      style={styles.actionBtn}>
+                      <PencilIcon size={18} color={Colors.accent} />
+                    </IconButton>
+                    <IconButton
+                      accessibilityLabel="Remove meal"
+                      onPress={() => onDelete(item)}
+                      style={styles.actionBtn}>
+                      <TrashIcon size={18} color={Colors.errorFg} />
+                    </IconButton>
+                  </View>
                 </View>
               </View>
-            </View>
+            </Surface>
           );
         }}
       />
@@ -277,9 +283,7 @@ export default function CalendarScreen() {
             <AppText variant="label" style={{ marginTop: Spacing[3] }}>
               Recipe
             </AppText>
-            <Pressable
-              style={styles.recipePick}
-              onPress={() => setPickerOpen(true)}>
+            <Pressable style={styles.recipePick} onPress={() => setPickerOpen(true)}>
               <AppText numberOfLines={2}>
                 {selectedRecipe?.recipe_label ?? 'Choose a recipe…'}
               </AppText>
@@ -317,29 +321,14 @@ export default function CalendarScreen() {
 
 const styles = StyleSheet.create({
   list: { padding: Spacing[4], paddingBottom: Spacing[12] },
-  pageHeader: {
-    flexDirection: 'row',
-    gap: Spacing[3],
-    alignItems: 'center',
-  },
-  iconChip: {
-    width: 52,
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.iconChipBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   dayCard: {
-    flexDirection: 'row',
-    gap: Spacing[3],
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.xl,
-    padding: Spacing[4],
     marginBottom: Spacing[3],
     backgroundColor: Colors.upcomingBg,
-    ...Shadows.soft,
+  },
+  dayInner: {
+    flexDirection: 'row',
+    gap: Spacing[3],
+    padding: Spacing[4],
   },
   dateBadge: {
     width: 52,
@@ -381,13 +370,11 @@ const styles = StyleSheet.create({
   },
   rowActions: {
     flexDirection: 'row',
-    gap: Spacing[4],
+    gap: Spacing[1],
     marginTop: Spacing[1],
   },
-  link: {
-    color: Colors.accent,
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.sm,
+  actionBtn: {
+    backgroundColor: Colors.white,
   },
   modalBackdrop: {
     flex: 1,
