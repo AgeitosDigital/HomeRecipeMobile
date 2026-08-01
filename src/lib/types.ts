@@ -1,0 +1,63 @@
+export type RecipeListItem = {
+  id: string;
+  recipe_id: string;
+  recipe_label: string;
+  calories: number | null;
+  cuisine_type: string[] | string | null;
+  meal_type: string[] | string | null;
+  time_in_minutes: number | null;
+  image_url: string | null;
+  website_url: string | null;
+  user_id: string | null;
+  created_at?: string | null;
+  deleted_at?: string | null;
+  expires_at?: string | null;
+  recipe_nutrition?:
+    | { energy_kcal: number | null; nutrition_source?: string | null }
+    | { energy_kcal: number | null; nutrition_source?: string | null }[]
+    | null;
+};
+
+export type RecipeDetail = RecipeListItem & {
+  ingredient_lines: string[] | string | null;
+  steps: string[] | string | null;
+  recipe_nutrition?:
+    | {
+        energy_kcal: number | null;
+        protein_g: number | null;
+        fat_g: number | null;
+        carb_g: number | null;
+        nutrition_source: string | null;
+        servings: number | null;
+      }
+    | {
+        energy_kcal: number | null;
+        protein_g: number | null;
+        fat_g: number | null;
+        carb_g: number | null;
+        nutrition_source: string | null;
+        servings: number | null;
+      }[]
+    | null;
+};
+
+export type FolderRow = {
+  id: string;
+  name: string;
+  user_id: string;
+  created_at?: string;
+};
+
+export type GroceryItem = {
+  id: string;
+  item_text: string;
+  checked: boolean;
+  created_at?: string;
+  category?: string | null;
+};
+
+export type MealDateRow = {
+  id: string;
+  meal_date: string;
+  user_id: string;
+};

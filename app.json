@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "HomeRecipeMobile",
+    "name": "HomeRecipe",
     "slug": "HomeRecipeMobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/brand/homerecipelogo1-removebg.png",
     "scheme": "homerecipemobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ageitosdigital.homerecipe",
+      "icon": "./assets/brand/homerecipelogo1-removebg.png"
     },
     "android": {
+      "package": "com.ageitosdigital.homerecipe",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+        "backgroundColor": "#f7f9f7",
+        "foregroundImage": "./assets/brand/homerecipelogo1-removebg.png"
+      }
     },
     "web": {
       "output": "static",
@@ -28,11 +28,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#f7f9f7",
+          "image": "./assets/brand/homerecipelogo1-removebg.png",
+          "imageWidth": 120
         }
-      ]
+      ],
+      "@clerk/expo",
+      "expo-secure-store",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
