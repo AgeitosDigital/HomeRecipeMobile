@@ -1,0 +1,18 @@
+# Local recipe URL import for HomeRecipe Mobile.
+#
+# Mobile never talks to this container directly. Flow:
+#   Expo app → EXPO_PUBLIC_APP_URL (Next on :3000) → this service (:8000)
+#
+# Build context defaults to a sibling web checkout. Override with HOMERECIPE_WEB_ROOT:
+#   HOMERECIPE_WEB_ROOT=/path/to/HomeRecipe/AI-Recipe-App/HomeRecipe docker compose up --build
+#
+# Do not add video-worker here — mobile Import URL does not use it.
+
+services:
+  recipe-url-import:
+    build:
+      context: ${HOMERECIPE_WEB_ROOT:-../HomeRecipe/AI-Recipe-App/HomeRecipe}/services/recipe-url-import
+    container_name: homerecipe-mobile-recipe-url-import
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

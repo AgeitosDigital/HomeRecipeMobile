@@ -8,10 +8,10 @@ import Purchases, {
 /** Must match the entitlement identifier in the RevenueCat dashboard. */
 export const PRO_ENTITLEMENT_ID = 'HomeRecipe Pro';
 
-/** Store product identifiers configured in App Store Connect / RevenueCat. */
+/** Store product identifiers — must match App Store Connect exactly (case-sensitive). */
 export const PRODUCT_IDS = {
-  monthly: 'monthly',
-  yearly: 'yearly',
+  monthly: 'Monthly',
+  yearly: 'Yearly',
 } as const;
 
 let configured = false;

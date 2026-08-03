@@ -18,6 +18,7 @@ Do not use patterns from older SDKs or generic RN tutorials without checking SDK
 - **Auth:** Clerk (`@clerk/expo`) — session token
 - **Data:** Supabase JS with Clerk JWT (`accessToken`) — same backend as web
 - **Import / billing:** call the **web app** via `EXPO_PUBLIC_APP_URL` (never call OpenAI or import workers from mobile)
+- **Local URL import:** `npm run import:up` starts Docker `recipe-url-import` (builds from the web repo). Next.js must also run on `:3000`. See README “Local recipe import”
 
 ## Getting started (for agents helping a new contributor)
 

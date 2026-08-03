@@ -79,7 +79,7 @@ Then:
 ### RevenueCat dashboard checklist
 
 1. Create entitlement **`HomeRecipe Pro`** (exact id used in code)
-2. Add products **`monthly`** and **`yearly`** (match App Store Connect)
+2. Add products **`Monthly`** and **`Yearly`** (match App Store Connect exactly — case-sensitive)
 3. Attach both products to that entitlement
 4. Create a current Offering with monthly + yearly packages
 5. Design a Paywall on that Offering (and optionally Customer Center)
