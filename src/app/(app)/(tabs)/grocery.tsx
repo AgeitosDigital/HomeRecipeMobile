@@ -1,5 +1,4 @@
 import { useAuth } from '@clerk/expo';
-import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -35,6 +34,7 @@ import {
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
+import { usePurchases } from '@/hooks/use-purchases';
 import { useSupabase } from '@/hooks/use-supabase';
 import {
   addGroceryItem,
@@ -45,7 +45,6 @@ import {
   toggleGroceryItem,
 } from '@/lib/kitchen';
 import type { GroceryCategory, GroceryItem } from '@/lib/types';
-import { useWebApi } from '@/lib/web-api';
 
 const CATEGORIES: { id: GroceryCategory | null; label: string }[] = [
   { id: null, label: 'None' },
@@ -57,8 +56,8 @@ const CATEGORIES: { id: GroceryCategory | null; label: string }[] = [
 
 export default function GroceryScreen() {
   const { userId } = useAuth();
-  const { isPro, loading: entitlementsLoading } = useEntitlements();
-  const { billingUrl } = useWebApi();
+  const { isPro, loading: entitlementsLoading, refresh: refreshEntitlements } = useEntitlements();
+  const { presentPaywall } = usePurchases();
   const supabase = useSupabase();
   const inputRef = useRef<TextInput>(null);
 
@@ -149,13 +148,14 @@ export default function GroceryScreen() {
         <ProLockState
           feature="grocery lists"
           illustration={<GroceryIcon size={48} color={Colors.gray400} />}
-          onUpgrade={
-            billingUrl
-              ? () => {
-                  void Linking.openURL(billingUrl);
-                }
-              : undefined
-          }
+          onUpgrade={() => {
+            void (async () => {
+              const result = await presentPaywall();
+              if (result === 'purchased' || result === 'restored' || result === 'skipped') {
+                await refreshEntitlements();
+              }
+            })();
+          }}
         />
       </Screen>
     );

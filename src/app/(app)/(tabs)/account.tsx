@@ -1,6 +1,5 @@
 import { useAuth, useUser } from '@clerk/expo';
 import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { AccountIcon, ChevronRightIcon } from '@/components/icons';
@@ -14,13 +13,14 @@ import {
   Spacing,
 } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
-import { useWebApi } from '@/lib/web-api';
+import { usePurchases } from '@/hooks/use-purchases';
 
 export default function AccountScreen() {
   const { signOut } = useAuth();
   const { user, isLoaded } = useUser();
-  const { isPro, loading } = useEntitlements();
-  const { billingUrl } = useWebApi();
+  const { isPro, loading, refresh: refreshEntitlements } = useEntitlements();
+  const { isRevenueCatPro, presentPaywall, presentCustomerCenter, restorePurchases } =
+    usePurchases();
 
   if (!isLoaded || loading) return <LoadingState />;
 
@@ -29,6 +29,27 @@ export default function AccountScreen() {
   const initials = (user?.firstName?.[0] || user?.fullName?.[0] || 'H').toUpperCase();
   const version =
     Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0';
+
+  const onUpgrade = async () => {
+    const result = await presentPaywall();
+    if (result === 'purchased' || result === 'restored' || result === 'skipped') {
+      await refreshEntitlements();
+    }
+  };
+
+  const onManageBilling = async () => {
+    if (isRevenueCatPro) {
+      await presentCustomerCenter();
+      await refreshEntitlements();
+      return;
+    }
+    Alert.alert(
+      'Manage billing',
+      isPro
+        ? 'Your Pro plan is managed on the web (Stripe). Open HomeRecipe on the web to update payment or cancel.'
+        : 'Upgrade to Pro in the app to manage your subscription here.'
+    );
+  };
 
   const onSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -84,27 +105,30 @@ export default function AccountScreen() {
             </View>
           </View>
 
-          {!isPro && billingUrl ? (
-            <View style={{ marginTop: Spacing[3] }}>
+          {!isPro ? (
+            <View style={{ marginTop: Spacing[3], gap: Spacing[2] }}>
+              <Button title="Upgrade to Pro" onPress={() => void onUpgrade()} />
               <Button
-                title="Upgrade to Pro"
+                title="Restore purchases"
+                variant="secondary"
                 onPress={() => {
-                  void Linking.openURL(billingUrl);
+                  void (async () => {
+                    const ok = await restorePurchases();
+                    if (ok) await refreshEntitlements();
+                  })();
                 }}
               />
             </View>
           ) : null}
 
-          {billingUrl ? (
-            <Pressable
-              onPress={() => {
-                void Linking.openURL(billingUrl);
-              }}
-              style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}>
-              <AppText>Manage billing on web</AppText>
-              <ChevronRightIcon size={20} color={Colors.gray500} />
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={() => void onManageBilling()}
+            style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}>
+            <AppText>
+              {isRevenueCatPro ? 'Manage subscription' : 'Manage billing'}
+            </AppText>
+            <ChevronRightIcon size={20} color={Colors.gray500} />
+          </Pressable>
         </Surface>
 
         <Surface>

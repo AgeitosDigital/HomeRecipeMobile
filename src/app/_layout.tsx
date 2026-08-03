@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
+import { PurchasesIdentitySync } from '@/providers/purchases-identity';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -61,7 +62,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-        <RootNavigator />
+        <PurchasesIdentitySync>
+          <RootNavigator />
+        </PurchasesIdentitySync>
       </ClerkProvider>
     </GestureHandlerRootView>
   );
