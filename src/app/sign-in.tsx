@@ -1,8 +1,8 @@
-import { isClerkAPIResponseError, useAuth } from '@clerk/expo';
-import { useHostedAuth } from '@clerk/expo/hosted-auth';
+import { isClerkAPIResponseError, useAuth, useSSO } from '@clerk/expo';
 import { useSignIn, useSignUp } from '@clerk/expo/legacy';
 import { Image } from 'expo-image';
 import { Redirect, type Href } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -15,24 +15,52 @@ import {
 import { AppText, Button, LoadingState, Screen } from '@/components/ui';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/theme';
 
-const REDIRECT_URL = 'homerecipemobile://oauth-native-callback';
+WebBrowser.maybeCompleteAuthSession();
+
 const logo = require('../../assets/brand/homerecipelogo1-removebg.png');
 
 export default function SignInScreen() {
   const { isLoaded, isSignedIn } = useAuth();
   const { signIn, setActive: setActiveSignIn, isLoaded: signInLoaded } = useSignIn();
   const { signUp, setActive: setActiveSignUp, isLoaded: signUpLoaded } = useSignUp();
-  const { startHostedAuth } = useHostedAuth();
+  const { startSSOFlow } = useSSO();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [pendingVerification, setPendingVerification] = useState(false);
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<
+    'oauth_google' | 'oauth_apple' | 'email' | 'verify' | null
+  >(null);
+  const busy = busyAction !== null;
 
   if (!isLoaded) return <LoadingState />;
   if (isSignedIn) return <Redirect href={'/(app)' as Href} />;
+
+  const startOAuth = async (strategy: 'oauth_google' | 'oauth_apple') => {
+    setBusyAction(strategy);
+    setError(null);
+    try {
+      const { createdSessionId, setActive, authSessionResult } = await startSSOFlow({
+        strategy,
+      });
+
+      // User closed the browser without finishing — not an error.
+      if (authSessionResult?.type !== 'success') return;
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        return;
+      }
+
+      setError('Sign-in incomplete. Try again or use email.');
+    } catch (err) {
+      setError(clerkErrorMessage(err));
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const startEmailFlow = async () => {
     if (!signInLoaded || !signUpLoaded || !signIn || !signUp) return;
@@ -41,7 +69,7 @@ export default function SignInScreen() {
       setError('Enter your email');
       return;
     }
-    setBusy(true);
+    setBusyAction('email');
     setError(null);
     try {
       try {
@@ -73,7 +101,7 @@ export default function SignInScreen() {
     } catch (err) {
       setError(clerkErrorMessage(err));
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -84,7 +112,7 @@ export default function SignInScreen() {
       setError('Enter the verification code');
       return;
     }
-    setBusy(true);
+    setBusyAction('verify');
     setError(null);
     try {
       if (mode === 'signIn') {
@@ -108,7 +136,7 @@ export default function SignInScreen() {
     } catch (err) {
       setError(clerkErrorMessage(err));
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -129,6 +157,27 @@ export default function SignInScreen() {
 
         {!pendingVerification ? (
           <>
+            <Button
+              title={busyAction === 'oauth_google' ? 'Opening Google…' : 'Continue with Google'}
+              variant="secondary"
+              disabled={busy}
+              onPress={() => startOAuth('oauth_google')}
+            />
+            <Button
+              title={busyAction === 'oauth_apple' ? 'Opening Apple…' : 'Continue with Apple'}
+              variant="secondary"
+              disabled={busy}
+              onPress={() => startOAuth('oauth_apple')}
+            />
+
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <AppText variant="muted" style={styles.orText}>
+                or
+              </AppText>
+              <View style={styles.orLine} />
+            </View>
+
             <TextInput
               autoCapitalize="none"
               autoComplete="email"
@@ -140,7 +189,7 @@ export default function SignInScreen() {
               onChangeText={setEmail}
             />
             <Button
-              title={busy ? 'Sending code…' : 'Continue with email'}
+              title={busyAction === 'email' ? 'Sending code…' : 'Continue with email'}
               onPress={startEmailFlow}
               disabled={busy}
             />
@@ -157,7 +206,7 @@ export default function SignInScreen() {
               onChangeText={setCode}
             />
             <Button
-              title={busy ? 'Verifying…' : 'Verify code'}
+              title={busyAction === 'verify' ? 'Verifying…' : 'Verify code'}
               onPress={verifyCode}
               disabled={busy}
             />
@@ -174,24 +223,6 @@ export default function SignInScreen() {
         )}
 
         {error ? <AppText variant="error">{error}</AppText> : null}
-
-        <View style={styles.divider} />
-        <Button
-          title="Open Clerk sign-in in browser"
-          variant="secondary"
-          disabled={busy}
-          onPress={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              await startHostedAuth({ mode: 'sign-in', redirectUrl: REDIRECT_URL });
-            } catch (err) {
-              setError(clerkErrorMessage(err));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -216,6 +247,18 @@ const styles = StyleSheet.create({
   logo: { width: 72, height: 72, alignSelf: 'center' },
   brand: { textAlign: 'center' },
   subtitle: { textAlign: 'center', marginBottom: Spacing[2] },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+    marginVertical: Spacing[1],
+  },
+  orLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.border,
+  },
+  orText: { fontSize: FontSize.sm },
   input: {
     backgroundColor: Colors.white,
     borderColor: Colors.border,
@@ -226,10 +269,5 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     paddingHorizontal: Spacing[4],
     paddingVertical: Spacing[3] + 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: Spacing[2],
   },
 });

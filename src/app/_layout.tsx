@@ -51,6 +51,7 @@ function RootNavigator() {
       }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="sign-in" />
+      <Stack.Screen name="sso-callback" options={{ headerShown: false }} />
       <Stack.Screen name="(app)" />
     </Stack>
   );
