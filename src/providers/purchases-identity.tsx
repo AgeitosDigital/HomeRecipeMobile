@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/expo';
+import { useAuth, useUser } from '@clerk/expo';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import Purchases from 'react-native-purchases';
@@ -8,13 +8,25 @@ import { configurePurchases, isPurchasesConfigured } from '@/lib/purchases';
 /**
  * Configures RevenueCat and links the Clerk user id as the app user id
  * so purchases stay attached to the signed-in HomeRecipe account.
+ * Also syncs email/display name as subscriber attributes for dashboard search.
  */
 export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded: authLoaded, userId } = useAuth();
+  const { isLoaded: userLoaded, user } = useUser();
   const lastUserId = useRef<string | null>(null);
 
+  const email =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses[0]?.emailAddress ??
+    null;
+  const displayName =
+    user?.fullName?.trim() ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
+    user?.username ||
+    null;
+
   useEffect(() => {
-    if (!isLoaded || Platform.OS === 'web') return;
+    if (!authLoaded || Platform.OS === 'web') return;
 
     let cancelled = false;
 
@@ -28,6 +40,16 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
             await Purchases.logIn(userId);
             lastUserId.current = userId;
           }
+
+          // Wait for Clerk user profile before writing attributes.
+          if (!userLoaded || !user) return;
+
+          if (email) {
+            await Purchases.setEmail(email);
+          }
+          if (displayName) {
+            await Purchases.setDisplayName(displayName);
+          }
         } else if (lastUserId.current) {
           await Purchases.logOut();
           lastUserId.current = null;
@@ -40,7 +62,7 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, userId]);
+  }, [authLoaded, userLoaded, userId, user, email, displayName]);
 
   return <>{children}</>;
 }
