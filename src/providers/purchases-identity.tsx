@@ -3,7 +3,9 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import Purchases from 'react-native-purchases';
 
+import { useSupabase } from '@/hooks/use-supabase';
 import { configurePurchases, isPurchasesConfigured } from '@/lib/purchases';
+import { fetchMyProfile, syncProfileToRevenueCat } from '@/lib/profile';
 
 function clerkAuthProvider(user: {
   externalAccounts?: { provider?: string | null }[] | null;
@@ -16,25 +18,26 @@ function clerkAuthProvider(user: {
 }
 
 /**
- * Configures RevenueCat and links the Clerk user id as the app user id
- * so purchases stay attached to the signed-in HomeRecipe account.
- * Syncs profile attributes for free and Pro customers (dashboard search).
+ * Configures RevenueCat and links the Clerk user id as the app user id.
+ * Merges Supabase profile fields (display name, phone, birthday) with Clerk
+ * so free and Pro customers stay identifiable in the RevenueCat dashboard.
  */
 export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
   const { isLoaded: authLoaded, userId } = useAuth();
   const { isLoaded: userLoaded, user } = useUser();
+  const supabase = useSupabase();
   const lastUserId = useRef<string | null>(null);
   const lastSyncedAttrs = useRef<string | null>(null);
 
-  const email =
+  const clerkEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses[0]?.emailAddress ??
     null;
-  const phone =
+  const clerkPhone =
     user?.primaryPhoneNumber?.phoneNumber ??
     user?.phoneNumbers[0]?.phoneNumber ??
     null;
-  const displayName =
+  const clerkDisplayName =
     user?.fullName?.trim() ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
     user?.username ||
@@ -64,8 +67,26 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
             lastSyncedAttrs.current = null;
           }
 
-          // Wait for Clerk user profile before writing attributes.
           if (!userLoaded || !user) return;
+
+          let profileDisplayName: string | null = null;
+          let profilePhone: string | null = null;
+          let profileBirthday: string | null = null;
+
+          try {
+            const { profile } = await fetchMyProfile(supabase, userId);
+            if (cancelled) return;
+            profileDisplayName = profile?.display_name?.trim() || null;
+            profilePhone = profile?.phone_number?.trim() || null;
+            profileBirthday = profile?.birthday || null;
+          } catch {
+            // Profile read is best-effort for RC attributes.
+          }
+
+          const email = clerkEmail;
+          const displayName = profileDisplayName || clerkDisplayName;
+          const phone = profilePhone || clerkPhone;
+          const birthday = profileBirthday;
 
           const attrKey = [
             userId,
@@ -77,41 +98,31 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
             username,
             authProvider,
             accountCreatedAt,
+            birthday,
           ].join('|');
           if (lastSyncedAttrs.current === attrKey) return;
 
-          // Ensure the subscriber exists after logIn / customer deletes.
           try {
             await Purchases.getCustomerInfo();
           } catch {
-            // Still attempt attributes; failures are non-fatal for Pro access.
+            // Still attempt attributes.
           }
           if (cancelled) return;
 
-          try {
-            // Reserved attributes (show in RevenueCat customer profile).
-            await Purchases.setEmail(email);
-            await Purchases.setDisplayName(displayName);
-            await Purchases.setPhoneNumber(phone);
+          await syncProfileToRevenueCat({
+            email,
+            displayName,
+            phone,
+            birthday,
+            clerkUserId: userId,
+            firstName,
+            lastName,
+            username,
+            authProvider,
+            accountCreatedAt,
+          });
 
-            // Custom attributes (searchable; do not store subscription status here).
-            await Purchases.setAttributes({
-              clerk_user_id: userId,
-              first_name: firstName,
-              last_name: lastName,
-              username,
-              auth_provider: authProvider,
-              account_created_at: accountCreatedAt,
-            });
-
-            // Push attributes immediately — otherwise RC waits for background/purchase.
-            await Purchases.syncAttributesAndOfferingsIfNeeded();
-
-            lastSyncedAttrs.current = attrKey;
-          } catch (attrErr) {
-            // Attribute sync is best-effort (dashboard search). Do not block billing.
-            console.warn('[purchases] subscriber attributes sync failed:', attrErr);
-          }
+          lastSyncedAttrs.current = attrKey;
         } else if (lastUserId.current) {
           await Purchases.logOut();
           lastUserId.current = null;
@@ -130,9 +141,10 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
     userLoaded,
     userId,
     user,
-    email,
-    phone,
-    displayName,
+    supabase,
+    clerkEmail,
+    clerkPhone,
+    clerkDisplayName,
     firstName,
     lastName,
     username,
