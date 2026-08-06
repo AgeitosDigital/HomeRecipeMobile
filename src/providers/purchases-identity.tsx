@@ -14,6 +14,7 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
   const { isLoaded: authLoaded, userId } = useAuth();
   const { isLoaded: userLoaded, user } = useUser();
   const lastUserId = useRef<string | null>(null);
+  const lastSyncedAttrs = useRef<string | null>(null);
 
   const email =
     user?.primaryEmailAddress?.emailAddress ??
@@ -39,20 +40,36 @@ export function PurchasesIdentitySync({ children }: { children: ReactNode }) {
           if (lastUserId.current !== userId) {
             await Purchases.logIn(userId);
             lastUserId.current = userId;
+            lastSyncedAttrs.current = null;
           }
 
           // Wait for Clerk user profile before writing attributes.
           if (!userLoaded || !user) return;
 
-          if (email) {
-            await Purchases.setEmail(email);
+          const attrKey = `${userId}|${email ?? ''}|${displayName ?? ''}`;
+          if (lastSyncedAttrs.current === attrKey) return;
+          if (!email && !displayName) return;
+
+          // Ensure the subscriber exists after logIn / customer deletes before attributes sync.
+          try {
+            await Purchases.getCustomerInfo();
+          } catch {
+            // Still attempt attributes; failures are non-fatal for Pro access.
           }
-          if (displayName) {
-            await Purchases.setDisplayName(displayName);
+          if (cancelled) return;
+
+          try {
+            if (email) await Purchases.setEmail(email);
+            if (displayName) await Purchases.setDisplayName(displayName);
+            lastSyncedAttrs.current = attrKey;
+          } catch (attrErr) {
+            // Attribute sync is best-effort (dashboard search). Do not block billing.
+            console.warn('[purchases] subscriber attributes sync failed:', attrErr);
           }
         } else if (lastUserId.current) {
           await Purchases.logOut();
           lastUserId.current = null;
+          lastSyncedAttrs.current = null;
         }
       } catch (err) {
         console.warn('[purchases] identity sync failed:', err);
