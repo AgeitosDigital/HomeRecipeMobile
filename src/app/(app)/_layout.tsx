@@ -25,6 +25,7 @@ export default function AppLayout() {
       <Stack.Screen name="recipe/create" options={{ title: 'New recipe', presentation: 'modal' }} />
       <Stack.Screen name="recipe/import" options={{ title: 'Import URL', presentation: 'modal' }} />
       <Stack.Screen name="cookbook/[folderId]" options={{ title: 'Cookbook' }} />
+      <Stack.Screen name="recipes" options={{ title: 'Recipes' }} />
       <Stack.Screen name="search" options={{ title: 'Search', presentation: 'modal' }} />
     </Stack>
   );

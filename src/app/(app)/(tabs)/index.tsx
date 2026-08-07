@@ -1,5 +1,5 @@
 import { useAuth, useUser } from '@clerk/expo';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Pressable,
@@ -45,7 +45,7 @@ import {
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
 import {
-  fetchFavoriteIds,
+  fetchFavorites,
   fetchFolderRecipeCounts,
   fetchFolders,
   addFavorite,
@@ -53,19 +53,8 @@ import {
 } from '@/lib/cookbooks';
 import { fetchMealPlan, type MealPlanDay } from '@/lib/kitchen';
 import { fetchUserRecipes } from '@/lib/recipes';
+import { computeOwnedStats, STAT_FILTER_META, type StatFilter } from '@/lib/stat-filters';
 import type { FolderRow, RecipeListItem } from '@/lib/types';
-
-function startOfWeek(d = new Date()) {
-  const copy = new Date(d);
-  const day = copy.getDay();
-  copy.setDate(copy.getDate() - day);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-function startOfMonth(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
 
 function formatUpcomingLabel(dateKey: string) {
   const d = new Date(`${dateKey}T12:00:00`);
@@ -101,7 +90,7 @@ export default function HomeScreen() {
 
     const [owned, favs, fold] = await Promise.all([
       fetchUserRecipes(supabase, userId),
-      fetchFavoriteIds(supabase, userId),
+      fetchFavorites(supabase, userId, isPro),
       fetchFolders(supabase, userId),
     ]);
 
@@ -112,7 +101,9 @@ export default function HomeScreen() {
     }
 
     setOwnedRecipes(owned.data);
-    setFavoriteIds(favs);
+    if (!favs.error) {
+      setFavoriteIds(new Set(favs.data.map((r) => r.id)));
+    }
 
     if (!fold.error) {
       setFolders(fold.data);
@@ -155,6 +146,12 @@ export default function HomeScreen() {
     };
   }, [load]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -162,27 +159,21 @@ export default function HomeScreen() {
   };
 
   const stats = useMemo(() => {
-    const weekStart = startOfWeek().getTime();
-    const monthStart = startOfMonth().getTime();
-    let recipesThisWeek = 0;
-    let importedThisMonth = 0;
-    for (const r of ownedRecipes) {
-      const created = r.created_at ? new Date(r.created_at).getTime() : NaN;
-      if (Number.isFinite(created) && created >= weekStart) recipesThisWeek += 1;
-      if (r.website_url && Number.isFinite(created) && created >= monthStart) {
-        importedThisMonth += 1;
-      }
-    }
+    const owned = computeOwnedStats(ownedRecipes);
     return {
-      total: ownedRecipes.length,
+      total: owned.total,
       favorites: favoriteIds.size,
-      recipesThisWeek,
-      importedThisMonth,
+      recipesThisWeek: owned.recipesThisWeek,
+      importedThisMonth: owned.importedThisMonth,
     };
   }, [ownedRecipes, favoriteIds]);
 
   const recentRecipes = useMemo(() => ownedRecipes.slice(0, 8), [ownedRecipes]);
   const firstName = user?.firstName;
+
+  const openStatFilter = (filter: StatFilter) => {
+    router.push({ pathname: '/(app)/recipes', params: { filter } } as Href);
+  };
 
   const canFavoriteRecipe = (recipe: RecipeListItem) =>
     isPro || !!(recipe.user_id && userId && recipe.user_id === userId);
@@ -280,31 +271,37 @@ export default function HomeScreen() {
             label="Total Recipes"
             value={stats.total}
             tone="blue"
-            caption="Start building your cookbook"
+            caption={STAT_FILTER_META.all.homeCaption(stats.total)}
+            accessibilityHint={STAT_FILTER_META.all.accessibilityHint}
             icon={<CookbookIcon size={18} color={Colors.brandBlue} />}
+            onPress={() => openStatFilter('all')}
           />
           <StatCard
             label="Favorites"
             value={stats.favorites}
             tone="green"
-            caption={stats.favorites === 0 ? 'No favorites yet' : 'View your favorites'}
+            caption={STAT_FILTER_META.favorites.homeCaption(stats.favorites)}
+            accessibilityHint={STAT_FILTER_META.favorites.accessibilityHint}
             icon={<HeartIcon size={18} color={Colors.brandLimeFg} filled />}
-            onPress={() => router.push('/(app)/(tabs)/cookbooks' as Href)}
+            onPress={() => openStatFilter('favorites')}
           />
           <StatCard
             label="Recipes This Week"
             value={stats.recipesThisWeek}
             tone="red"
-            caption="Keep cooking!"
+            caption={STAT_FILTER_META.week.homeCaption(stats.recipesThisWeek)}
+            accessibilityHint={STAT_FILTER_META.week.accessibilityHint}
             icon={<CalendarIcon size={18} color={Colors.accent} />}
+            onPress={() => openStatFilter('week')}
           />
           <StatCard
             label="Imported This Month"
             value={stats.importedThisMonth}
             tone="purple"
-            caption="Add some new recipes"
+            caption={STAT_FILTER_META.imported.homeCaption(stats.importedThisMonth)}
+            accessibilityHint={STAT_FILTER_META.imported.accessibilityHint}
             icon={<StarIcon size={18} color="#7b5ea7" />}
-            onPress={onCookIt}
+            onPress={() => openStatFilter('imported')}
           />
         </View>
 
@@ -489,13 +486,15 @@ function StatCard({
   caption,
   icon,
   onPress,
+  accessibilityHint,
 }: {
   label: string;
   value: number;
   tone: 'blue' | 'green' | 'red' | 'purple';
   caption: string;
   icon: ReactNode;
-  onPress?: () => void;
+  onPress: () => void;
+  accessibilityHint: string;
 }) {
   const captionColors = {
     blue: Colors.brandBlue,
@@ -504,8 +503,13 @@ function StatCard({
     purple: '#7b5ea7',
   } as const;
 
-  const content = (
-    <>
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${value}`}
+      accessibilityHint={accessibilityHint}
+      style={({ pressed }) => [styles.statCard, pressed && { opacity: 0.9 }]}>
       <IconCircle tone={tone} size={40}>
         {icon}
       </IconCircle>
@@ -514,20 +518,8 @@ function StatCard({
       <AppText style={[styles.statCaption, { color: captionColors[tone] }]} numberOfLines={2}>
         {caption}
       </AppText>
-    </>
+    </Pressable>
   );
-
-  if (onPress) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [styles.statCard, pressed && { opacity: 0.9 }]}>
-        {content}
-      </Pressable>
-    );
-  }
-
-  return <View style={styles.statCard}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
