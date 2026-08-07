@@ -41,6 +41,7 @@ import {
   fetchFolderRecipeCounts,
   fetchFolders,
   fetchTrashedFolders,
+  removeFavorite,
   renameFolder,
   restoreFolder,
   softDeleteFolder,
@@ -291,6 +292,15 @@ export default function CookbooksScreen() {
                   favorited
                   compact
                   onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+                  onToggleFavorite={() => {
+                    if (!userId) return;
+                    setFavorites((prev) => prev.filter((r) => r.id !== item.id));
+                    void removeFavorite(supabase, userId, item.id).then((result) => {
+                      if (result.error) {
+                        void load();
+                      }
+                    });
+                  }}
                 />
               ))}
             </ScrollView>

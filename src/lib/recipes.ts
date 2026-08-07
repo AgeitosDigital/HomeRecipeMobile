@@ -33,14 +33,18 @@ export function recipeDisplayEnergyKcal(row: RecipeListItem | RecipeDetail): num
 
 export async function fetchUserRecipes(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  options?: { sort?: 'recent' | 'label' }
 ): Promise<{ data: RecipeListItem[]; error: string | null }> {
+  const sort = options?.sort ?? 'recent';
   const { data, error } = await supabase
     .from('recipes')
     .select(RECIPE_LIST_COLUMNS)
     .is('deleted_at', null)
     .eq('user_id', userId)
-    .order('recipe_label', { ascending: true })
+    .order(sort === 'label' ? 'recipe_label' : 'created_at', {
+      ascending: sort === 'label',
+    })
     .limit(100);
 
   if (error) return { data: [], error: error.message };
@@ -117,10 +121,17 @@ export async function createRecipe(
     ingredient_lines: string;
     steps: string;
     time_in_minutes?: number | null;
+    image_url?: string | null;
+    website_url?: string | null;
+    calories?: number | null;
+    meal_type?: string | null;
+    recipe_id?: string;
     isPro: boolean;
   }
 ): Promise<{ data: RecipeDetail | null; error: string | null }> {
-  const recipeId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const recipeId =
+    input.recipe_id?.trim() ||
+    `manual-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const expiresAt = input.isPro
     ? null
     : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -133,13 +144,50 @@ export async function createRecipe(
       ingredient_lines: input.ingredient_lines,
       steps: input.steps,
       time_in_minutes: input.time_in_minutes ?? null,
+      image_url: input.image_url?.trim() || null,
+      website_url: input.website_url?.trim() || null,
+      calories: input.calories ?? 0,
+      meal_type: input.meal_type ?? null,
       user_id: userId,
       expires_at: expiresAt,
     })
     .select(RECIPE_DETAIL_COLUMNS)
     .single();
 
-  if (error) return { data: null, error: error.message };
+  if (error) {
+    // Re-import of same URL: return the existing owned row when possible.
+    if (input.recipe_id && (error.code === '23505' || /duplicate|unique/i.test(error.message))) {
+      const existing = await supabase
+        .from('recipes')
+        .select(RECIPE_DETAIL_COLUMNS)
+        .eq('recipe_id', recipeId)
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (existing.data) {
+        const updated = await supabase
+          .from('recipes')
+          .update({
+            recipe_label: input.recipe_label.trim(),
+            ingredient_lines: input.ingredient_lines,
+            steps: input.steps,
+            time_in_minutes: input.time_in_minutes ?? null,
+            image_url: input.image_url?.trim() || null,
+            website_url: input.website_url?.trim() || null,
+            calories: input.calories ?? 0,
+            meal_type: input.meal_type ?? null,
+            expires_at: expiresAt,
+          })
+          .eq('id', (existing.data as RecipeDetail).id)
+          .eq('user_id', userId)
+          .select(RECIPE_DETAIL_COLUMNS)
+          .single();
+        if (updated.error) return { data: null, error: updated.error.message };
+        return { data: updated.data as RecipeDetail, error: null };
+      }
+    }
+    return { data: null, error: error.message };
+  }
   return { data: data as RecipeDetail, error: null };
 }
 
@@ -152,16 +200,22 @@ export async function updateRecipe(
     ingredient_lines: string;
     steps: string;
     time_in_minutes?: number | null;
+    image_url?: string | null;
   }
 ): Promise<{ data: RecipeDetail | null; error: string | null }> {
+  const patch: Record<string, unknown> = {
+    recipe_label: input.recipe_label.trim(),
+    ingredient_lines: input.ingredient_lines,
+    steps: input.steps,
+    time_in_minutes: input.time_in_minutes ?? null,
+  };
+  if (input.image_url !== undefined) {
+    patch.image_url = input.image_url?.trim() || null;
+  }
+
   const { data, error } = await supabase
     .from('recipes')
-    .update({
-      recipe_label: input.recipe_label.trim(),
-      ingredient_lines: input.ingredient_lines,
-      steps: input.steps,
-      time_in_minutes: input.time_in_minutes ?? null,
-    })
+    .update(patch)
     .eq('id', id)
     .eq('user_id', userId)
     .is('deleted_at', null)

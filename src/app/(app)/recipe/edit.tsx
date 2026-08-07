@@ -1,23 +1,24 @@
 import { useAuth } from '@clerk/expo';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { AppText, Button, ErrorState, LoadingState, Screen } from '@/components/ui';
-import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import {
+  RecipeEditorForm,
+  type RecipeEditorValues,
+} from '@/components/recipe-editor-form';
+import { ErrorState, LoadingState, Screen } from '@/components/ui';
 import { useSupabase } from '@/hooks/use-supabase';
 import { asStringList, fetchRecipeById, updateRecipe } from '@/lib/recipes';
+import { useWebApi } from '@/lib/web-api';
 
 export default function EditRecipeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useAuth();
   const supabase = useSupabase();
+  const { uploadRecipeCover } = useWebApi();
   const router = useRouter();
 
-  const [label, setLabel] = useState('');
-  const [ingredients, setIngredients] = useState('');
-  const [steps, setSteps] = useState('');
-  const [minutes, setMinutes] = useState('');
+  const [initial, setInitial] = useState<Partial<RecipeEditorValues> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,12 +41,17 @@ export default function EditRecipeScreen() {
         setLoading(false);
         return;
       }
-      setLabel(result.data.recipe_label);
-      setIngredients(asStringList(result.data.ingredient_lines).join('\n'));
-      setSteps(asStringList(result.data.steps).join('\n'));
-      setMinutes(
-        result.data.time_in_minutes != null ? String(result.data.time_in_minutes) : ''
-      );
+      setInitial({
+        label: result.data.recipe_label,
+        ingredientLines: asStringList(result.data.ingredient_lines),
+        stepLines: asStringList(result.data.steps),
+        minutes:
+          result.data.time_in_minutes != null
+            ? String(result.data.time_in_minutes)
+            : '',
+        imageUri: result.data.image_url,
+        imageNeedsUpload: false,
+      });
       setLoading(false);
     })();
     return () => {
@@ -53,29 +59,44 @@ export default function EditRecipeScreen() {
     };
   }, [id, supabase, userId]);
 
-  const onSave = async () => {
+  const onSave = async (values: RecipeEditorValues) => {
     if (!userId || !id) return;
-    if (!label.trim()) {
-      setError('Title is required');
-      return;
-    }
     setBusy(true);
     setError(null);
-    const ingredient_lines = ingredients
-      .split('\n')
+
+    let imageUrl: string | null | undefined = undefined;
+    if (values.imageNeedsUpload && values.imageUri) {
+      const uploaded = await uploadRecipeCover({
+        uri: values.imageUri,
+        mimeType: values.localImageMimeType ?? 'image/jpeg',
+        fileName: values.localImageFileName ?? 'recipe.jpg',
+        recipeLabel: values.label,
+      });
+      if (uploaded.error || !uploaded.url) {
+        setBusy(false);
+        setError(uploaded.error ?? 'Could not upload photo');
+        return;
+      }
+      imageUrl = uploaded.url;
+    } else if (values.imageUri === null) {
+      imageUrl = null;
+    }
+
+    const ingredient_lines = values.ingredientLines
       .map((s) => s.trim())
       .filter(Boolean)
       .join('***');
-    const stepLines = steps
-      .split('\n')
+    const stepLines = values.stepLines
       .map((s) => s.trim())
       .filter(Boolean)
       .join('***');
+
     const result = await updateRecipe(supabase, userId, id, {
-      recipe_label: label,
+      recipe_label: values.label,
       ingredient_lines,
       steps: stepLines,
-      time_in_minutes: minutes ? Number(minutes) : null,
+      time_in_minutes: Number(values.minutes),
+      image_url: imageUrl,
     });
     setBusy(false);
     if (result.error || !result.data) {
@@ -86,14 +107,11 @@ export default function EditRecipeScreen() {
   };
 
   if (loading) return <LoadingState />;
-  if (loadError) {
+  if (loadError || !initial) {
     return (
       <>
         <Stack.Screen options={{ title: 'Edit recipe' }} />
-        <ErrorState
-          message={loadError}
-          onRetry={() => router.back()}
-        />
+        <ErrorState message={loadError ?? 'Recipe not found'} onRetry={() => router.back()} />
       </>
     );
   }
@@ -102,78 +120,15 @@ export default function EditRecipeScreen() {
     <>
       <Stack.Screen options={{ title: 'Edit recipe' }} />
       <Screen edges={['left', 'right', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Field label="Title" value={label} onChangeText={setLabel} />
-          <Field
-            label="Time (minutes)"
-            value={minutes}
-            onChangeText={setMinutes}
-            keyboardType="number-pad"
-          />
-          <Field
-            label="Ingredients"
-            value={ingredients}
-            onChangeText={setIngredients}
-            multiline
-          />
-          <Field label="Steps" value={steps} onChangeText={setSteps} multiline />
-          {error ? <AppText variant="error">{error}</AppText> : null}
-          <Button title="Save changes" loading={busy} onPress={onSave} />
-          <Button
-            title="Cancel"
-            variant="secondary"
-            onPress={() => {
-              Alert.alert('Discard changes?', undefined, [
-                { text: 'Keep editing', style: 'cancel' },
-                { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-              ]);
-            }}
-          />
-        </ScrollView>
+        <RecipeEditorForm
+          initial={initial}
+          busy={busy}
+          error={error}
+          submitLabel="Save changes"
+          onSubmit={(values) => void onSave(values)}
+          onCancel={() => router.back()}
+        />
       </Screen>
     </>
   );
 }
-
-function Field({
-  label,
-  value,
-  onChangeText,
-  multiline,
-  keyboardType,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  multiline?: boolean;
-  keyboardType?: 'default' | 'number-pad';
-}) {
-  return (
-    <View style={{ gap: Spacing[2] }}>
-      <AppText variant="label">{label}</AppText>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        placeholderTextColor={Colors.gray500}
-        style={[styles.input, multiline && styles.multiline]}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: { padding: Spacing[4], gap: Spacing[4], paddingBottom: Spacing[12] },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[3],
-    fontFamily: FontFamily.body,
-    color: Colors.foreground,
-    backgroundColor: Colors.white,
-  },
-  multiline: { minHeight: 120, textAlignVertical: 'top' },
-});

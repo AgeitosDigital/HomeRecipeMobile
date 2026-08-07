@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/expo';
 import { useRouter, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, StyleSheet, TextInput, View } from 'react-native';
 
 import { SearchIcon } from '@/components/icons';
@@ -9,6 +9,11 @@ import { AppText, EmptyState, Screen, Surface } from '@/components/ui';
 import { Colors, FontFamily, HitTarget, Radius, Shadows, Spacing } from '@/constants/theme';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
+import {
+  addFavorite,
+  fetchFavoriteIds,
+  removeFavorite,
+} from '@/lib/cookbooks';
 import { searchRecipes } from '@/lib/recipes';
 import type { RecipeListItem } from '@/lib/types';
 
@@ -20,8 +25,19 @@ export default function SearchScreen() {
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<RecipeListItem[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+
+  const loadFavoriteIds = useCallback(async () => {
+    if (!userId) return;
+    const ids = await fetchFavoriteIds(supabase, userId);
+    setFavoriteIds(ids);
+  }, [supabase, userId]);
+
+  useEffect(() => {
+    void loadFavoriteIds();
+  }, [loadFavoriteIds]);
 
   useEffect(() => {
     if (!userId) return;
@@ -39,6 +55,31 @@ export default function SearchScreen() {
     }, 300);
     return () => clearTimeout(handle);
   }, [query, userId, supabase, isPro]);
+
+  const canFavoriteRecipe = (recipe: RecipeListItem) =>
+    isPro || !!(recipe.user_id && userId && recipe.user_id === userId);
+
+  const onToggleFavorite = async (recipe: RecipeListItem) => {
+    if (!userId || !canFavoriteRecipe(recipe)) return;
+    const wasFavorited = favoriteIds.has(recipe.id);
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (wasFavorited) next.delete(recipe.id);
+      else next.add(recipe.id);
+      return next;
+    });
+    const result = wasFavorited
+      ? await removeFavorite(supabase, userId, recipe.id)
+      : await addFavorite(supabase, userId, recipe.id);
+    if (result.error) {
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (wasFavorited) next.add(recipe.id);
+        else next.delete(recipe.id);
+        return next;
+      });
+    }
+  };
 
   return (
     <Screen>
@@ -81,7 +122,11 @@ export default function SearchScreen() {
         renderItem={({ item }) => (
           <RecipeCard
             recipe={item}
+            favorited={favoriteIds.has(item.id)}
             onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+            onToggleFavorite={
+              canFavoriteRecipe(item) ? () => void onToggleFavorite(item) : undefined
+            }
           />
         )}
       />

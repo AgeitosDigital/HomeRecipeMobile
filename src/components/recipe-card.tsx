@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { HeartIcon } from '@/components/icons';
 import { AppText } from '@/components/ui';
 import { Colors, FontFamily, FontSize, HitTarget, Radius, Shadows, Spacing } from '@/constants/theme';
+import { formatRecipeTitleTwoWordsPerLine } from '@/lib/format-recipe-title';
 import type { RecipeListItem } from '@/lib/types';
 
 const placeholder = require('../../assets/brand/recipe-placeholder.png');
@@ -23,9 +24,13 @@ export function RecipeCard({
   /** Narrow card for horizontal carousels */
   compact?: boolean;
 }) {
+  const title = formatRecipeTitleTwoWordsPerLine(recipe.recipe_label);
+
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={recipe.recipe_label}
       style={({ pressed }) => [
         styles.card,
         compact && styles.cardCompact,
@@ -39,13 +44,13 @@ export function RecipeCard({
         transition={200}
       />
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.72)']}
-        locations={[0.35, 0.6, 1]}
+        colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.78)']}
+        locations={[0.28, 0.55, 1]}
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.content}>
         <AppText numberOfLines={3} style={styles.title}>
-          {recipe.recipe_label}
+          {title}
         </AppText>
         {recipe.time_in_minutes ? (
           <AppText style={styles.meta}>{recipe.time_in_minutes} min</AppText>
@@ -63,7 +68,7 @@ export function RecipeCard({
           style={styles.heart}>
           <HeartIcon
             size={22}
-            color={favorited ? Colors.accent : Colors.white}
+            color={favorited ? Colors.accent : Colors.foreground}
             filled={favorited}
           />
         </Pressable>
@@ -88,9 +93,9 @@ const styles = StyleSheet.create({
   },
   content: {
     position: 'absolute',
-    left: Spacing[3],
-    right: Spacing[3],
-    bottom: Spacing[3],
+    left: Spacing[5],
+    right: Spacing[5],
+    bottom: Spacing[5],
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -103,9 +108,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
   },
   meta: {
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.base,
+    textAlign: 'right',
   },
   heart: {
     position: 'absolute',

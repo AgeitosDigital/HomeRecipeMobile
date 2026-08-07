@@ -36,7 +36,15 @@
       "@clerk/expo",
       "expo-secure-store",
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "HomeRecipe uses your photo library so you can add a picture to your recipe.",
+          "cameraPermission": "HomeRecipe uses the camera so you can photograph a dish for your recipe.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

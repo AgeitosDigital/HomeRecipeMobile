@@ -1,10 +1,10 @@
 import { useAuth } from '@clerk/expo';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { RecipeDetailShell } from '@/components/recipe-detail-shell';
 import {
   AppText,
   Button,
@@ -38,8 +39,6 @@ import {
   softDeleteRecipe,
 } from '@/lib/recipes';
 import type { FolderRow, RecipeDetail } from '@/lib/types';
-
-const placeholder = require('../../../../assets/brand/recipe-placeholder.png');
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -92,6 +91,12 @@ export default function RecipeDetailScreen() {
   const kcal = recipe ? recipeDisplayEnergyKcal(recipe) : null;
   const owned = !!(recipe?.user_id && userId && recipe.user_id === userId);
   const canFavorite = isPro || owned;
+  const metaLine = [
+    recipe?.time_in_minutes ? `${recipe.time_in_minutes} min` : null,
+    kcal != null ? `${kcal} kcal` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const openSaveToFolder = async () => {
     if (!userId) return;
@@ -154,29 +159,24 @@ export default function RecipeDetailScreen() {
     );
   };
 
+  const onToggleFavorite = async () => {
+    if (!userId || !recipe || !canFavorite) return;
+    const next = !favorited;
+    setFavorited(next);
+    const result = next
+      ? await addFavorite(supabase, userId, recipe.id)
+      : await removeFavorite(supabase, userId, recipe.id);
+    if (result.error) setFavorited(!next);
+  };
+
   return (
     <>
       <Stack.Screen
         options={{
           title: recipe?.recipe_label ?? 'Recipe',
-          headerRight: () =>
-            recipe ? (
-              <Pressable
-                onPress={async () => {
-                  if (!userId || !recipe || !canFavorite) return;
-                  if (favorited) {
-                    setFavorited(false);
-                    await removeFavorite(supabase, userId, recipe.id);
-                  } else {
-                    setFavorited(true);
-                    await addFavorite(supabase, userId, recipe.id);
-                  }
-                }}>
-                <AppText style={{ color: Colors.accent, fontSize: 22, paddingHorizontal: 8 }}>
-                  {favorited ? '♥' : '♡'}
-                </AppText>
-              </Pressable>
-            ) : null,
+          headerTransparent: true,
+          headerTitle: '',
+          headerTintColor: Colors.white,
         }}
       />
       {loading ? (
@@ -185,97 +185,60 @@ export default function RecipeDetailScreen() {
         <ErrorState message={error ?? 'Recipe not found'} onRetry={reload} />
       ) : (
         <ScrollView
-          style={styles.screen}
-          contentContainerStyle={[styles.content, cookingMode && styles.cooking]}>
-          <Image
-            source={recipe.image_url ? { uri: recipe.image_url } : placeholder}
-            style={styles.hero}
-            contentFit="cover"
-          />
-          <AppText variant="heading">{recipe.recipe_label}</AppText>
-          <AppText variant="muted">
-            {[
-              recipe.time_in_minutes ? `${recipe.time_in_minutes} min` : null,
-              kcal != null ? `${kcal} kcal` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </AppText>
-
-          <View style={styles.actions}>
-            <Button
-              title={cookingMode ? 'Exit cooking mode' : 'Cooking mode'}
-              variant={cookingMode ? 'secondary' : 'primary'}
-              onPress={() => setCookingMode((v) => !v)}
-            />
-            {owned ? (
-              <Button
-                title="Edit"
-                variant="secondary"
-                onPress={() =>
-                  router.push({ pathname: '/(app)/recipe/edit', params: { id: recipe.id } } as Href)
-                }
-              />
-            ) : null}
-            <Button
-              title="Save to cookbook"
-              variant="secondary"
-              loading={busyAction === 'folder'}
-              onPress={openSaveToFolder}
-            />
-            <Button
-              title="Add ingredients to grocery"
-              variant="secondary"
-              loading={busyAction === 'grocery'}
-              onPress={onAddToGrocery}
-            />
-            {owned ? (
-              <Button
-                title="Delete"
-                variant="ghost"
-                onPress={() => {
-                  if (!userId) return;
-                  Alert.alert('Delete recipe?', 'This moves the recipe to trash.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: async () => {
-                        await softDeleteRecipe(supabase, userId, recipe.id);
-                        router.replace('/(app)/(tabs)' as Href);
+          style={[styles.screen, cookingMode && styles.cooking]}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}>
+          <RecipeDetailShell
+            title={recipe.recipe_label}
+            imageUrl={recipe.image_url}
+            metaLine={metaLine || null}
+            favorited={favorited}
+            canFavorite={canFavorite}
+            onToggleFavorite={onToggleFavorite}
+            cookingMode={cookingMode}
+            onToggleCookingMode={() => setCookingMode((v) => !v)}
+            showSecondaryActions={!cookingMode}
+            onSaveToCookbook={openSaveToFolder}
+            cookbookBusy={busyAction === 'folder'}
+            onAddToGrocery={onAddToGrocery}
+            groceryBusy={busyAction === 'grocery'}
+            onEdit={
+              owned
+                ? () =>
+                    router.push({
+                      pathname: '/(app)/recipe/edit',
+                      params: { id: recipe.id },
+                    } as Href)
+                : undefined
+            }
+            onOpenSource={
+              recipe.website_url
+                ? () => {
+                    void Linking.openURL(recipe.website_url!);
+                  }
+                : undefined
+            }
+            onDelete={
+              owned
+                ? () => {
+                    if (!userId) return;
+                    Alert.alert('Delete recipe?', 'This moves the recipe to trash.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await softDeleteRecipe(supabase, userId, recipe.id);
+                          router.replace('/(app)/(tabs)' as Href);
+                        },
                       },
-                    },
-                  ]);
-                }}
-              />
-            ) : null}
-          </View>
-
-          {ingredients.length > 0 ? (
-            <View style={styles.section}>
-              <AppText variant="title">Ingredients</AppText>
-              {ingredients.map((line, index) => (
-                <AppText
-                  key={`${index}-${line}`}
-                  style={[styles.line, cookingMode && styles.lineLarge]}>
-                  • {line}
-                </AppText>
-              ))}
-            </View>
-          ) : null}
-
-          {steps.length > 0 ? (
-            <View style={styles.section}>
-              <AppText variant="title">Steps</AppText>
-              {steps.map((line, index) => (
-                <AppText
-                  key={`${index}-${line}`}
-                  style={[styles.line, cookingMode && styles.lineLarge]}>
-                  {index + 1}. {line}
-                </AppText>
-              ))}
-            </View>
-          ) : null}
+                    ]);
+                  }
+                : undefined
+            }
+            ingredients={ingredients}
+            steps={steps}
+          />
         </ScrollView>
       )}
 
@@ -325,23 +288,8 @@ export default function RecipeDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing[4], paddingBottom: Spacing[12], gap: Spacing[3] },
+  content: { paddingBottom: Spacing[8] },
   cooking: { backgroundColor: Colors.backgroundMuted },
-  hero: {
-    width: '100%',
-    height: 220,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.gray100,
-  },
-  actions: { flexDirection: 'row', gap: Spacing[2], flexWrap: 'wrap' },
-  section: { marginTop: Spacing[3], gap: Spacing[2] },
-  line: {
-    color: Colors.foreground,
-    fontFamily: FontFamily.body,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  lineLarge: { fontSize: 18, lineHeight: 28 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',

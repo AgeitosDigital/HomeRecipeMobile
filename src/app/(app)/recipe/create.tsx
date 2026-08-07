@@ -1,50 +1,65 @@
 import { useAuth } from '@clerk/expo';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { AppText, Button, Screen } from '@/components/ui';
-import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import {
+  RecipeEditorForm,
+  type RecipeEditorValues,
+} from '@/components/recipe-editor-form';
+import { Screen } from '@/components/ui';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useSupabase } from '@/hooks/use-supabase';
 import { createRecipe } from '@/lib/recipes';
+import { useWebApi } from '@/lib/web-api';
 
 export default function CreateRecipeScreen() {
   const { userId } = useAuth();
   const { isPro } = useEntitlements();
   const supabase = useSupabase();
+  const { uploadRecipeCover } = useWebApi();
   const router = useRouter();
 
-  const [label, setLabel] = useState('');
-  const [ingredients, setIngredients] = useState('');
-  const [steps, setSteps] = useState('');
-  const [minutes, setMinutes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const onSave = async () => {
+  const onSave = async (values: RecipeEditorValues) => {
     if (!userId) return;
-    if (!label.trim()) {
-      setError('Title is required');
-      return;
-    }
     setBusy(true);
     setError(null);
-    const ingredient_lines = ingredients
-      .split('\n')
+
+    let imageUrl: string | null = null;
+    if (values.imageNeedsUpload && values.imageUri) {
+      const uploaded = await uploadRecipeCover({
+        uri: values.imageUri,
+        mimeType: values.localImageMimeType ?? 'image/jpeg',
+        fileName: values.localImageFileName ?? 'recipe.jpg',
+        recipeLabel: values.label,
+      });
+      if (uploaded.error || !uploaded.url) {
+        setBusy(false);
+        setError(uploaded.error ?? 'Could not upload photo');
+        return;
+      }
+      imageUrl = uploaded.url;
+    } else if (values.imageUri && !values.imageNeedsUpload) {
+      imageUrl = values.imageUri;
+    }
+
+    const ingredient_lines = values.ingredientLines
       .map((s) => s.trim())
       .filter(Boolean)
       .join('***');
-    const stepLines = steps
-      .split('\n')
+    const steps = values.stepLines
       .map((s) => s.trim())
       .filter(Boolean)
       .join('***');
+
     const result = await createRecipe(supabase, userId, {
-      recipe_label: label,
+      recipe_label: values.label,
       ingredient_lines,
-      steps: stepLines,
-      time_in_minutes: minutes ? Number(minutes) : null,
+      steps,
+      time_in_minutes: Number(values.minutes),
+      image_url: imageUrl,
       isPro,
     });
     setBusy(false);
@@ -56,71 +71,15 @@ export default function CreateRecipeScreen() {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
-        <AppText variant="muted">
-          Free recipes may expire after 30 days.
-        </AppText>
-        <Field label="Title" value={label} onChangeText={setLabel} />
-        <Field
-          label="Time (minutes)"
-          value={minutes}
-          onChangeText={setMinutes}
-          keyboardType="number-pad"
-        />
-        <Field
-          label="Ingredients"
-          value={ingredients}
-          onChangeText={setIngredients}
-          multiline
-        />
-        <Field label="Steps" value={steps} onChangeText={setSteps} multiline />
-        {error ? <AppText variant="error">{error}</AppText> : null}
-        <Button title={busy ? 'Saving…' : 'Save recipe'} onPress={onSave} disabled={busy} />
-      </ScrollView>
+    <Screen edges={['left', 'right', 'bottom']}>
+      <RecipeEditorForm
+        freeTierNote={!isPro}
+        busy={busy}
+        error={error}
+        submitLabel="Save recipe"
+        onSubmit={(values) => void onSave(values)}
+        onCancel={() => router.back()}
+      />
     </Screen>
   );
 }
-
-function Field({
-  label,
-  value,
-  onChangeText,
-  multiline,
-  keyboardType,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  multiline?: boolean;
-  keyboardType?: 'default' | 'number-pad';
-}) {
-  return (
-    <View style={{ gap: Spacing[2] }}>
-      <AppText variant="label">{label}</AppText>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        placeholderTextColor={Colors.gray500}
-        style={[styles.input, multiline && styles.multiline]}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: { padding: Spacing[4], gap: Spacing[4], paddingBottom: Spacing[12] },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[3],
-    fontFamily: FontFamily.body,
-    color: Colors.foreground,
-    backgroundColor: Colors.white,
-  },
-  multiline: { minHeight: 120, textAlignVertical: 'top' },
-});

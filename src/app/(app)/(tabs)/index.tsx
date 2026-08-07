@@ -48,6 +48,8 @@ import {
   fetchFavoriteIds,
   fetchFolderRecipeCounts,
   fetchFolders,
+  addFavorite,
+  removeFavorite,
 } from '@/lib/cookbooks';
 import { fetchMealPlan, type MealPlanDay } from '@/lib/kitchen';
 import { fetchUserRecipes } from '@/lib/recipes';
@@ -181,6 +183,31 @@ export default function HomeScreen() {
 
   const recentRecipes = useMemo(() => ownedRecipes.slice(0, 8), [ownedRecipes]);
   const firstName = user?.firstName;
+
+  const canFavoriteRecipe = (recipe: RecipeListItem) =>
+    isPro || !!(recipe.user_id && userId && recipe.user_id === userId);
+
+  const onToggleFavorite = async (recipe: RecipeListItem) => {
+    if (!userId || !canFavoriteRecipe(recipe)) return;
+    const wasFavorited = favoriteIds.has(recipe.id);
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (wasFavorited) next.delete(recipe.id);
+      else next.add(recipe.id);
+      return next;
+    });
+    const result = wasFavorited
+      ? await removeFavorite(supabase, userId, recipe.id)
+      : await addFavorite(supabase, userId, recipe.id);
+    if (result.error) {
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (wasFavorited) next.add(recipe.id);
+        else next.delete(recipe.id);
+        return next;
+      });
+    }
+  };
 
   const onCookIt = () => {
     const trimmed = importUrl.trim();
@@ -430,6 +457,9 @@ export default function HomeScreen() {
                 favorited={favoriteIds.has(item.id)}
                 compact
                 onPress={() => router.push(`/(app)/recipe/${item.id}` as Href)}
+                onToggleFavorite={
+                  canFavoriteRecipe(item) ? () => void onToggleFavorite(item) : undefined
+                }
               />
             ))}
           </ScrollView>
